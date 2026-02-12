@@ -1,0 +1,9 @@
+xarray
+numpy
+matplotlib
+geopandas
+regionmask
+cartopy
+scipy
+rioxarray
+ipykernel
