@@ -134,7 +134,7 @@ def mask(
 def raster(da: xr.DataArray, tiffname: str) -> None:
     return da.rio.to_raster(tiffname)
 
-def creaGeoJson(
+def create_geojson(
     ds_mask: xr.DataArray | xr.Dataset,
     geojson_path: str,
     optional_params: Optional[dict] = None,
@@ -200,7 +200,7 @@ def creaGeoJson(
     except Exception as e:
         print(f"An error occurred: {str(e)}")
 
-def creaGeoJsonPerZone(
+def create_geojson_per_zone(
     ds_mask: xr.DataArray | xr.Dataset,
     shapefile_path: str,
     geojson_path: str,
@@ -339,6 +339,56 @@ def creaGeoJsonPerZone(
         traceback.print_exc()
         return None
 
+
+def calculate_LST(
+        filename: str,
+        shapepath: str,
+        epsg: int,
+        zona: str,
+        lon_name: str,
+        lat_name: str,
+    ):
+    nome = filename.split("/")[-1]
+    print(nome)
+    print(f"{filename}/{nome}_B5.TIF")
+    try:
+        Band5 = rio.open_rasterio(f"{filename}/{nome}_B5.TIF").rio.reproject(
+            "EPSG:4326"
+        )
+        Band4 = rio.open_rasterio(f"{filename}/{nome}_B4.TIF").rio.reproject(
+            "EPSG:4326"
+        )
+        Band3 = rio.open_rasterio(f"{filename}/{nome}_B3.TIF").rio.reproject(
+            "EPSG:4326"
+        )
+        Band10 = rio.open_rasterio(f"{filename}/{nome}_B10.TIF").rio.reproject(
+            "EPSG:4326"
+        )
+    except Exception:
+        print("Data not available")
+        return
+
+    file_path = f"{filename}/{nome}_MTL.txt"
+    BT = calcBT(Band10, file_path)
+    ndvi = ndvi_calculation(Band5, Band4)
+    Pv = proportion_vegetation(ndvi.squeeze())
+
+    emissivity = calculate_land_emissivity(ndvi.squeeze(), Pv)
+    LST = calcLST(BT, emissivity)
+    da = mask(
+        shapepath,
+        LST,
+        epsg=epsg,
+        zona=zona,
+        lon_name=lon_name,
+        lat_name=lat_name,
+    )
+    da = np.round(da, 1)
+    print(da)
+    da.to_dataset(name="LST").to_netcdf(f"{filename}/{nome}.nc")
+    da.rio.to_raster(f"{filename}/{nome}.tif")
+
+
 def main(argv: Optional[Iterable[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description="Compute LST from Landsat inputs and optionally mask by a city polygon."
@@ -362,45 +412,17 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     for filename in args.files:
-        nome = filename.split("/")[-1]
-        print(nome)
-        print(f"{filename}/{nome}_B5.TIF")
         try:
-            Band5 = rio.open_rasterio(f"{filename}/{nome}_B5.TIF").rio.reproject(
-                "EPSG:4326"
+            calculate_LST(
+                filename,
+                args.shapepath,
+                args.epsg,
+                args.zona,
+                args.lon_name,
+                args.lat_name
             )
-            Band4 = rio.open_rasterio(f"{filename}/{nome}_B4.TIF").rio.reproject(
-                "EPSG:4326"
-            )
-            Band3 = rio.open_rasterio(f"{filename}/{nome}_B3.TIF").rio.reproject(
-                "EPSG:4326"
-            )
-            Band10 = rio.open_rasterio(f"{filename}/{nome}_B10.TIF").rio.reproject(
-                "EPSG:4326"
-            )
-        except Exception:
-            print("Data not available")
-            continue
-
-        file_path = f"{filename}/{nome}_MTL.txt"
-        BT = calcBT(Band10, file_path)
-        ndvi = ndvi_calculation(Band5, Band4)
-        Pv = proportion_vegetation(ndvi.squeeze())
-
-        emissivity = calculate_land_emissivity(ndvi.squeeze(), Pv)
-        LST = calcLST(BT, emissivity)
-        da = mask(
-            args.shapepath,
-            LST,
-            epsg=args.epsg,
-            zona=args.zona,
-            lon_name=args.lon_name,
-            lat_name=args.lat_name,
-        )
-        da = np.round(da, 1)
-        print(da)
-        da.to_dataset(name="LST").to_netcdf(f"{filename}/{nome}.nc")
-        da.rio.to_raster(f"{filename}/{nome}.tif")
+        except Exception as e:
+            print(f"Exception calculating LST for file {filename}: \n{e}")
 
     return 0
 
