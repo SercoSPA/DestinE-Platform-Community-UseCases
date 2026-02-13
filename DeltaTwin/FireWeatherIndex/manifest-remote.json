@@ -1,0 +1,103 @@
+{
+  "name": "fwi-plotter",
+  "description": "FWI plotter",
+  "license": {
+    "name": "LGPLv3",
+    "url": "https://www.gdeltnu.org/licenses/gpl-3.0.txt",
+    "description": "",
+    "copyrights": [
+      {
+        "years": [2026],
+        "company": "Serco"
+      }
+    ]
+  },
+  "owner": "Serco",
+
+  "inputs": {
+    "user": {
+      "type": "string",
+      "description": "DestinE Service Platform User Credentials."
+    },
+    "password": {
+      "type": "secret",
+      "description": "DestinE Service Platform Password Credentials."
+    }
+  },
+
+  "outputs": {
+    "fwi-plot": {
+      "type": "Data",
+      "description": "FWI and risk forecast as GIF"
+    }
+  },
+
+  "models": {
+    "fwi": {
+      "path": "models/fwi",
+      "type": "python",
+      "parameters": {
+        "pythonVersion": "3.11",
+        "aptRequirements": [
+          {
+            "name": "libexpat1"
+          },
+          {
+            "name": "libexpat1-dev"
+          }
+        ],
+        "pipRequirements": [
+          {
+            "name": "destinepyauth",
+            "version": "1.1.0"
+          },
+          {
+            "name": "cartopy"
+          },
+          {
+            "name": "destinepyauth"
+          },
+          {
+            "name": "h5"
+          },
+          {
+            "name": "h5netcdf"
+          },
+          {
+            "name": "matplotlib"
+          },
+          {
+            "name": "pillow"
+          },
+          {
+            "name": "rioxarray"
+          },
+          {
+            "name": "tqdm"
+          }
+        ],
+        "hardwareRequirements": {
+          "cpu": "2000m",
+          "ram": "4Gi"
+        },
+        "command": "python fwi.py $(inputs.user) $(inputs.password)"
+      },
+      "inputs": {
+        "user": {
+          "type": "string"
+        },
+        "password": {
+          "type": "secret"
+        }
+      },
+      "outputs": {
+        "fwi-plot": {
+          "type": "Data",
+          "glob": "fwi_forecast.gif"
+        }
+      }
+    }
+  },
+
+  "dependencies": {}
+}

@@ -1,0 +1,10 @@
+{
+  "user": {
+    "type": "string",
+    "value": "johnsmith"
+  },
+  "password": {
+    "type": "secret",
+    "value": "XXXXXX"
+  }
+}
