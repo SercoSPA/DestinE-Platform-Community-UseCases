@@ -92,7 +92,7 @@ def calculate_land_emissivity(NDVI: xr.DataArray, Pv: xr.DataArray) -> xr.DataAr
     
     return emissivity
 
-def calcBT(Band10: xr.DataArray, filepath: str) -> xr.DataArray:
+def calculate_brightness_temperature(Band10: xr.DataArray, filepath: str) -> xr.DataArray:
     '''
     Band10 : Digital Number from Landsat TIRS instrument Band 10
     filepath : file of metadata file
@@ -108,7 +108,10 @@ def calcBT(Band10: xr.DataArray, filepath: str) -> xr.DataArray:
     BT = K2 /  np.log  ( K1 / TOA_10  + 1) - 273.15
     return BT
 
-def calcLST(BT: xr.DataArray, emissivity: xr.DataArray) -> xr.DataArray:
+def calculate_LST(BT: xr.DataArray, emissivity: xr.DataArray) -> xr.DataArray:
+    """
+    Calculate Land Surface Temperature.
+    """
     lampda = 10.895 # [micron]
     rho = 14388 # [micron K]
     par = (lampda * BT)/rho
@@ -340,7 +343,7 @@ def create_geojson_per_zone(
         return None
 
 
-def calculate_LST(
+def calculate_LST_from_file(
         filename: str,
         shapepath: str,
         epsg: int,
@@ -352,15 +355,19 @@ def calculate_LST(
     print(nome)
     print(f"{filename}/{nome}_B5.TIF")
     try:
+        # NIR
         Band5 = rio.open_rasterio(f"{filename}/{nome}_B5.TIF").rio.reproject(
             "EPSG:4326"
         )
+        # RED
         Band4 = rio.open_rasterio(f"{filename}/{nome}_B4.TIF").rio.reproject(
             "EPSG:4326"
         )
-        Band3 = rio.open_rasterio(f"{filename}/{nome}_B3.TIF").rio.reproject(
-            "EPSG:4326"
-        )
+        # GREEN
+        # Band3 = rio.open_rasterio(f"{filename}/{nome}_B3.TIF").rio.reproject(
+        #     "EPSG:4326"
+        # )
+        # TIRS 1
         Band10 = rio.open_rasterio(f"{filename}/{nome}_B10.TIF").rio.reproject(
             "EPSG:4326"
         )
@@ -369,12 +376,12 @@ def calculate_LST(
         return
 
     file_path = f"{filename}/{nome}_MTL.txt"
-    BT = calcBT(Band10, file_path)
+    BT = calculate_brightness_temperature(Band10, file_path)
     ndvi = ndvi_calculation(Band5, Band4)
     Pv = proportion_vegetation(ndvi.squeeze())
 
     emissivity = calculate_land_emissivity(ndvi.squeeze(), Pv)
-    LST = calcLST(BT, emissivity)
+    LST = calculate_LST(BT, emissivity)
     da = mask(
         shapepath,
         LST,
@@ -413,7 +420,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
 
     for filename in args.files:
         try:
-            calculate_LST(
+            calculate_LST_from_file(
                 filename,
                 args.shapepath,
                 args.epsg,
