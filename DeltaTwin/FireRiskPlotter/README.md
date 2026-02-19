@@ -1,4 +1,4 @@
-# DeltaTwin Component: Fire Weather Index forecast
+# DeltaTwin Component: Fire Risk Plotter
 
 The Fire Risk plotter is a component designed to generate short-term forecasts of fire risk–related indicators. It retrieves the most recent 5-day forecast from the [Fire Risk Map - Released Energy Based - MSG](https://data.destination-earth.eu/data-portfolio/EO.EUM.DAT.MSG.LSA-FRM) via the Harmonized Data Access (HDA) service and visualizes the outputs as an animated GIF. The underlying product integrates numerical weather prediction (NWP) data with remotely sensed Fire Radiative Power (FRP) observations to estimate fire danger conditions. The forecasts include 24h, 48h, 72h, 96h, and 120h lead times and provide: (i) fire risk levels categorized into five classes and the probability of ignitions exceeding 2000 GJ of released energy over Southern Europe, and (ii) the Fire Weather Index (FWI) and its components over the full MSG disk. In this implementation, the analysis and visualization are spatially constrained to the Italian peninsula.
 
