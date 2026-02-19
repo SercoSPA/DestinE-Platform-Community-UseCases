@@ -21,9 +21,9 @@ jobs:
         python-version: 3.11
         cache: 'pip'
     - name: Install dependencies
-      run: pip install -r DeltaTwin/FireRiskPlotter/models/fwi/requirements.txt
+      run: pip install -r DeltaTwin/FireRiskPlotter/models/fire-risk-plotter/requirements.txt
     - name: Create forecast
-      run: python DeltaTwin/FireRiskPlotter/models/fwi/fwi.py
+      run: python DeltaTwin/FireRiskPlotter/models/fire-risk-plotter/fire-risk-plotter.py
     - name: Verify forecast output
       run: |
         if [ ! -f fwi_forecast.gif ]; then

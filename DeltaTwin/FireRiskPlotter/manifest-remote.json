@@ -33,8 +33,8 @@
   },
 
   "models": {
-    "fwi": {
-      "path": "models/fwi",
+    "fire-risk-plotter": {
+      "path": "models/fire-risk-plotter",
       "type": "python",
       "parameters": {
         "pythonVersion": "3.11",
@@ -80,7 +80,7 @@
           "cpu": "2000m",
           "ram": "4Gi"
         },
-        "command": "python fwi.py $(inputs.user) $(inputs.password)"
+        "command": "python fire-risk-plotter.py $(inputs.user) $(inputs.password)"
       },
       "inputs": {
         "user": {
