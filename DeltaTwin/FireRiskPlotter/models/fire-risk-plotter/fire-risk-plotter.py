@@ -25,7 +25,7 @@ COLLECTION_ID = "EO.EUM.DAT.MSG.LSA-FRM"
 DT_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
-log = logging.getLogger("FWI")
+log = logging.getLogger("FireRiskPlotter")
 log.setLevel(logging.INFO)
 
 

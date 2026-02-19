@@ -56,7 +56,7 @@ python models/fire-risk-plotter/fire-risk-plotter.py <username> <password>
 ```
 If the run is successful, the logs will show individual PNG frames being created and finally:
 ```
-INFO FWI: GIF saved: firerisk_forecast.gif
+INFO FireRiskPlotter: GIF saved: firerisk_forecast.gif
 ```
 
 ### Build the DeltaTwin component and run it locally
