@@ -363,10 +363,6 @@ def calculate_LST_from_file(
         Band4 = rio.open_rasterio(f"{filename}/{nome}_B4.TIF").rio.reproject(
             "EPSG:4326"
         )
-        # GREEN
-        # Band3 = rio.open_rasterio(f"{filename}/{nome}_B3.TIF").rio.reproject(
-        #     "EPSG:4326"
-        # )
         # TIRS 1
         Band10 = rio.open_rasterio(f"{filename}/{nome}_B10.TIF").rio.reproject(
             "EPSG:4326"
