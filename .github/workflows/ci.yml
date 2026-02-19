@@ -26,8 +26,8 @@ jobs:
       run: python DeltaTwin/FireRiskPlotter/models/fire-risk-plotter/fire-risk-plotter.py
     - name: Verify forecast output
       run: |
-        if [ ! -f fwi_forecast.gif ]; then
-          echo "Error: fwi_forecast.gif was not created"
+        if [ ! -f firerisk_forecast.gif ]; then
+          echo "Error: firerisk_forecast.gif was not created"
           exit 1
         fi
-        echo "Success: fwi_forecast.gif created"
+        echo "Success: firerisk_forecast.gif created"

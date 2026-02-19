@@ -5,28 +5,28 @@ nodes:
   - id: password
     ref: inputs.password
 
-  - id: fwi
-    ref: models.fwi
+  - id: fire-risk-plotter
+    ref: models.fire-risk-plotter
 
   - id: plot
-    ref: outputs.fwi-plot
+    ref: outputs.firerisk-plot
   
 edges:
 
   - from:
       id: user
     to:
-      id: fwi
+      id: fire-risk-plotter
       port: user
 
   - from:
       id: password
     to:
-      id: fwi
+      id: fire-risk-plotter
       port: password
 
   - from:
-      id: fwi
-      port: fwi-plot
+      id: fire-risk-plotter
+      port: firerisk-plot
     to:
       id: plot

@@ -26,7 +26,7 @@
   },
 
   "outputs": {
-    "fwi-plot": {
+    "firerisk-plot": {
       "type": "Data",
       "description": "FWI and risk forecast as GIF"
     }
@@ -91,9 +91,9 @@
         }
       },
       "outputs": {
-        "fwi-plot": {
+        "firerisk-plot": {
           "type": "Data",
-          "glob": "fwi_forecast.gif"
+          "glob": "firerisk_forecast.gif"
         }
       }
     }
