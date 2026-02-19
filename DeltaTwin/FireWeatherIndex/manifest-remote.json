@@ -1,6 +1,6 @@
 {
-  "name": "fwi-plotter",
-  "description": "FWI plotter",
+  "name": "fire-risk-plotter",
+  "description": "The Fire Risk plotter is a component designed to generate short-term forecasts of fire risk–related indicators. It retrieves the most recent 5-day forecast from the MSG Fire Risk data via the Harmonized Data Access (HDA) service and visualizes the outputs as an animated GIF.",
   "license": {
     "name": "LGPLv3",
     "url": "https://www.gdeltnu.org/licenses/gpl-3.0.txt",
