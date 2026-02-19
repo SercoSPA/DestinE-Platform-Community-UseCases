@@ -406,7 +406,7 @@ def main(out_path: Path = Path("./.delta")):
         out_path: Directory for temporary/output files (default: ./.delta)
     
     Output:
-        - Individual PNG files: firerisk0.png through fwi4.png
+        - Individual PNG files: firerisk0.png through firerisk4.png
         - Animated GIF: firerisk_forecast.gif
     
     Raises:
