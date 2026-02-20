@@ -25,7 +25,7 @@ COLLECTION_ID = "EO.EUM.DAT.MSG.LSA-FRM"
 DT_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
-log = logging.getLogger("FWI")
+log = logging.getLogger("FireRiskPlotter")
 log.setLevel(logging.INFO)
 
 
@@ -318,7 +318,7 @@ def _process_and_plot_fwi(h5_file: Path, plot_index: int) -> None:
         Saves PNG file with dual-panel FWI/Risk visualization
     """
     # Create plot
-    output_file = f"fwi{plot_index}.png"
+    output_file = f"firerisk{plot_index}.png"
 
     # Discrete Risk classes (1..5): green, yellow, then darker reds
     risk_colors = [
@@ -406,8 +406,8 @@ def main(out_path: Path = Path("./.delta")):
         out_path: Directory for temporary/output files (default: ./.delta)
     
     Output:
-        - Individual PNG files: fwi0.png through fwi4.png
-        - Animated GIF: fwi_forecast.gif
+        - Individual PNG files: firerisk0.png through firerisk4.png
+        - Animated GIF: firerisk_forecast.gif
     
     Raises:
         Exception: If no products found or unexpected number of products returned
@@ -454,16 +454,16 @@ def main(out_path: Path = Path("./.delta")):
         _process_and_plot_fwi(h5_file, i)
 
     # Build animated GIF from generated plots (0.5s per frame)
-    frames = [Path(f"fwi{i}.png") for i in range(len(results["features"]))]
-    _create_gif(frames, Path("fwi_forecast.gif"), frame_duration_s=1)
+    frames = [Path(f"firerisk{i}.png") for i in range(len(results["features"]))]
+    _create_gif(frames, Path("firerisk_forecast.gif"), frame_duration_s=1)
 
 if __name__ == "__main__":
     """
     Command-line interface for Fire Weather Index forecast visualization.
     
     Usage:
-        python fwi.py                    # Use credentials from environment variables
-        python fwi.py <username> <password>  # Provide credentials as arguments
+        python fire-risk-plotter.py                    # Use credentials from environment variables
+        python fire-risk-plotter.py <username> <password>  # Provide credentials as arguments
     
     Environment Variables:
         DESPAUTH_USER: Username for Destination Earth HDA authentication
@@ -484,7 +484,7 @@ if __name__ == "__main__":
     
     # Parse command-line arguments for authentication
     if len(sys.argv) not in (3, 1):
-        log.info("Usage: python fwi.py <username> <password>")
+        log.info("Usage: python fire-risk-plotter.py <username> <password>")
         sys.exit(1)
     
     # Set authentication credentials from command-line args if provided
@@ -498,5 +498,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        log.error(f"Failed to run fwi.py:\n {e}")
+        log.error(f"Failed to run fire-risk-plotter.py:\n {e}")
         sys.exit(1)

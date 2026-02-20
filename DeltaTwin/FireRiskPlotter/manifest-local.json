@@ -1,6 +1,6 @@
 {
-  "name": "fwi-plotter",
-  "description": "FWI plotter",
+  "name": "fire-risk-plotter",
+  "description": "The Fire Risk plotter is a component designed to generate short-term forecasts of fire risk–related indicators. It retrieves the most recent 5-day forecast from the MSG Fire Risk data via the Harmonized Data Access (HDA) service and visualizes the outputs as an animated GIF.",
   "license": {
     "name": "LGPLv3",
     "url": "https://www.gdeltnu.org/licenses/gpl-3.0.txt",
@@ -26,15 +26,15 @@
   },
 
   "outputs": {
-    "fwi-plot": {
+    "firerisk-plot": {
       "type": "Data",
       "description": "FWI and risk forecast as GIF"
     }
   },
 
   "models": {
-    "fwi": {
-      "path": "models/fwi",
+    "fire-risk-plotter": {
+      "path": "models/fire-risk-plotter",
       "type": "python",
       "parameters": {
         "pythonVersion": "3.11",
@@ -80,7 +80,7 @@
           "cpu": "2000m",
           "ram": "4Gi"
         },
-        "command": "python fwi.py $(inputs.user) $(inputs.password)"
+        "command": "python fire-risk-plotter.py $(inputs.user) $(inputs.password)"
       },
       "inputs": {
         "user": {
@@ -91,9 +91,9 @@
         }
       },
       "outputs": {
-        "fwi-plot": {
+        "firerisk-plot": {
           "type": "Data",
-          "glob": "fwi_forecast.gif"
+          "glob": "firerisk_forecast.gif"
         }
       }
     }
