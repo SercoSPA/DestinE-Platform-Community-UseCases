@@ -13,50 +13,50 @@ The workflow is defined in [workflow.yml](workflow.yml) and wires workflow input
 The workflow defines the graph that connects inputs to the model and then to the output:
 
 - `user` and `password` nodes reference `inputs.user` and `inputs.password`.
-- The `fwi` node references `models.fwi`.
-- The `plot` node references `outputs.fwi-plot`.
+- The `fire-risk-plotter` node references `models.fire-risk-plotter`.
+- The `plot` node references `outputs.firerisk-plot`.
 
 Edges connect the inputs to the model’s input ports and connect the model’s output port to the output node. The important wiring is:
 
 ```yaml
   - from:
-      id: fwi
-      port: fwi-plot
+      id: fire-risk-plotter
+      port: firerisk-plot
     to:
       id: plot
 ```
 
-This matches the output name declared in the model definition and makes the generated PNG available as the component output.
+This matches the output name declared in the model definition and makes the generated GIF available as the component output.
 
 | **Node** | **Kind** | **Description** |
 | -------- | -------- | --------------- |
 | user | input | DESP auth username passed to the model as the first CLI argument (`user`). |
 | password | input | DESP auth password passed to the model as the second CLI argument (`password`). |
-| fwi | model | The Python model that searches the HDA STAC catalog, downloads MSG fire risk products (5-day forecast), and generates an animated GIF with individual PNG frames. |
-| plot | output | The output node wired to `outputs.fwi-plot`, which captures the animated GIF produced by the model. |
+| fire-risk-plotter | model | The Python model that searches the HDA STAC catalog, downloads MSG fire risk products (5-day forecast), and generates an animated GIF with individual PNG frames. |
+| plot | output | The output node wired to `outputs.firerisk-plot`, which captures the animated GIF produced by the model. |
 
 ## Steps to build the component
 
 ### Local testing of the model
 
-The model is implemented in [models/fwi/fwi.py](models/fwi/fwi.py) and expects two CLI arguments.
+The model is implemented in [models/fire-risk-plotter/fire-risk-plotter.py](models/fire-risk-plotter/fire-risk-plotter.py) and expects two CLI arguments.
 
-[models/fwi/fwi.py](models/fwi/fwi.py) expects two CLI arguments: `user` and `password`. These are used to set `DESPAUTH_USER` and `DESPAUTH_PASSWORD` before calling `destinepyauth.get_token()`.
+[models/fire-risk-plotter/fire-risk-plotter.py](models/fire-risk-plotter/fire-risk-plotter.py) expects two CLI arguments: `user` and `password`. These are used to set `DESPAUTH_USER` and `DESPAUTH_PASSWORD` before calling `destinepyauth.get_token()`.
 
 To install the Python dependencies locally:
 
 ```shell
-pip install -r models/fwi/requirements.txt
+pip install -r models/fire-risk-plotter/requirements.txt
 ```
 
 To run the model locally:
 
 ```shell
-python models/fwi/fwi.py <username> <password>
+python models/fire-risk-plotter/fire-risk-plotter.py <username> <password>
 ```
 If the run is successful, the logs will show individual PNG frames being created and finally:
 ```
-INFO FWI: GIF saved: fwi_forecast.gif
+INFO FireRiskPlotter: GIF saved: firerisk_forecast.gif
 ```
 
 ### Build the DeltaTwin component and run it locally
@@ -102,11 +102,11 @@ Inputs:
 Outputs:
      Output name | Type | Value/Basename                                                                                                          
     -------------+------+---------------------------------------------------------------------------                                              
-     fwi-plot    | Data | /path/to/home/.deltatwin/runs/<run_id>/fwi/fwi_forecast.gif 
+  firerisk-plot | Data | /path/to/home/.deltatwin/runs/<run_id>/fire-risk-plotter/firerisk_forecast.gif 
 ```
 The outputs of the component are stored in a temporary directory associated to the local run ID.
 
-The resulting file `fwi_forecast.gif` contains an animated 5-day forecast with frames similar to the example plot below.
+The resulting file `firerisk_forecast.gif` contains an animated 5-day forecast with frames similar to the example plot below.
 
 ![plot](assets/fwi_forecast_example.gif)
 
@@ -126,21 +126,21 @@ This manifest references UUIDs of sample resources that are publicly available o
 >
 > ```json
 > {
->   "name": "fwi-plotter-myname",
+>   "name": "fire-risk-plotter-myname",
 >   [...]
 > }
 > ```
 
-Then, to publish the component to the DeltaTwin service, the following command specifies the version '0.1.0' with the 'fwi' and 'tutorial' tags.
+Then, to publish the component to the DeltaTwin service, the following command specifies the version '0.1.0' with the 'fire-risk' and 'tutorial' tags.
 
 ```shell
-deltatwin component publish -t fwi -t tutorial 0.1.0
+deltatwin component publish -t fire-risk -t tutorial 0.1.0
 ```
 
 This will print various log lines as the image is built and its layers are pushed to the service repository. The process should complete successfully with the following message:
 
 ```log
-INFO: The DeltaTwin fwi-plotter-myname-0.1.0, has been released.
+INFO: The DeltaTwin fire-risk-plotter-myname-0.1.0, has been released.
 ```
 
 By default, the component is published with private visibility.
@@ -153,17 +153,17 @@ deltatwin component list -v private
 To get more information about this specific component, use:
 
 ```shell
-deltatwin component get fwi-plotter-myname
+deltatwin component get fire-risk-plotter-myname
 ```
 
 ### Run the component on the service
 
-There is a known issue: the CLI cannot decrypt `secret` values from `inputs.json`. If you set `type: "secret"` in the inputs file, the run fails with a `fromhex()` error. **Therefore, the fwi-plotter model cannot be run on the service using the CLI**. For service runs, publish the component and pass the secret via the UI, which handles encryption for `secret` inputs.
+There is a known issue: the CLI cannot decrypt `secret` values from `inputs.json`. If you set `type: "secret"` in the inputs file, the run fails with a `fromhex()` error. **Therefore, the fire-risk-plotter model cannot be run on the service using the CLI**. For service runs, publish the component and pass the secret via the UI, which handles encryption for `secret` inputs.
 
 Once the component has been published to the service, it is ready to use. To run the component using the platform's computing resources, navigate to the [DeltaTwin UI](https://app.deltatwin.destine.eu) and follow these steps:
 - login
 - select `DeltaTwins` from the menu on the left
-- select the component you just created `fwi-plotter-myname`
+- select the component you just created `fire-risk-plotter-myname`
 - select run in the top right
 - a menu should appear as shown below for you to input your DESP credentials
 - press `Start Run`

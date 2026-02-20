@@ -26,15 +26,15 @@
   },
 
   "outputs": {
-    "fwi-plot": {
+    "firerisk-plot": {
       "type": "Data",
       "description": "FWI and risk forecast as GIF"
     }
   },
 
   "models": {
-    "fwi": {
-      "path": "models/fwi",
+    "fire-risk-plotter": {
+      "path": "models/fire-risk-plotter",
       "type": "python",
       "parameters": {
         "pythonVersion": "3.11",
@@ -80,7 +80,7 @@
           "cpu": "2000m",
           "ram": "4Gi"
         },
-        "command": "python fwi.py $(inputs.user) $(inputs.password)"
+        "command": "python fire-risk-plotter.py $(inputs.user) $(inputs.password)"
       },
       "inputs": {
         "user": {
@@ -91,9 +91,9 @@
         }
       },
       "outputs": {
-        "fwi-plot": {
+        "firerisk-plot": {
           "type": "Data",
-          "glob": "fwi_forecast.gif"
+          "glob": "firerisk_forecast.gif"
         }
       }
     }
