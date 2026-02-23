@@ -25,5 +25,5 @@
         https://sesameo.destine.eu/collections/EO.NASA.DAT.LANDSAT.C2_L2
         https://data.destination-earth.eu/data-portfolio/EO.NASA.DAT.LANDSAT.C2_L2
     - Feed bands into LST calculation code
-    - The output from band extractor seems to be a file path. So I'm not sure if band extractor downloads file? Not sure if API key needs to be written in?
+    - The output from band extractor seems to be a file path. So I'm not sure if band extractor downloads file? Not sure how API key is passed to sesamEO?
     - So for now, stick with HDA / destinepyauth
