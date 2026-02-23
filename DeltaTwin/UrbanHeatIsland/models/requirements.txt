@@ -1,0 +1,7 @@
+rioxarray
+xarray
+numpy
+geopandas
+regionmask
+destinepyauth
+tqdm

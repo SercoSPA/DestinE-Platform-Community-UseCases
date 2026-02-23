@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 from typing import Iterable, Optional
 
 import xarray as xr
@@ -9,6 +10,12 @@ import pandas as pd
 import numpy as np
 import geopandas as gpd
 from regionmask import mask_geopandas
+import json
+import rasterio
+import warnings
+from shapely.geometry import Polygon
+
+from hda import search_and_download
 
 
 def extract_parameter_value(file_path: str, parameter_name: str) -> Optional[float]:
@@ -142,13 +149,6 @@ def create_geojson(
     geojson_path: str,
     optional_params: Optional[dict] = None,
 ) -> None:
-    import json
-    import geopandas as gpd
-    import numpy as np
-    from shapely.geometry import Point, Polygon, box
-    import geopandas as gpd
-    import rasterio
-    from rasterio.features import rasterize
     try:
         # Create a meshgrid from the coordinate arrays
         x = ds_mask.x.values
@@ -224,14 +224,6 @@ def create_geojson_per_zone(
     optional_params : dict, optional
         Optional parameters to add to the GeoJSON
     """
-    import json
-    import geopandas as gpd
-    import numpy as np
-    import xarray as xr
-    from shapely.geometry import box
-    import rasterio
-    from rasterio.features import rasterize
-    import warnings
     
     try:
         # Load the shapefile
@@ -392,37 +384,37 @@ def calculate_LST_from_file(
     da.rio.to_raster(f"{filename}/{nome}.tif")
 
 
-def main(argv: Optional[Iterable[str]] = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Compute LST from Landsat inputs and optionally mask by a city polygon."
-    )
-    parser.add_argument(
-        "--files",
-        nargs="+",
-        required=True,
-        help="One or more base folders containing Landsat files.",
-    )
-    parser.add_argument(
-        "--shapepath",
-        required=True,
-        help="Path to a shapefile with municipal boundaries.",
-    )
-    parser.add_argument("--zona", default="Roma", help="Municipality name to select.")
-    parser.add_argument("--epsg", type=int, default=4326, help="EPSG code for reprojection.")
-    parser.add_argument("--lon-name", default="x", help="Longitude coordinate name.")
-    parser.add_argument("--lat-name", default="y", help="Latitude coordinate name.")
+def main(
+    download_collection_id = "XXXXX",
+    download_datetime_range = 1,
+    download_out_path = "./",
+    download_limit = 1,
+    download_max = 1,
+    download_asset_key = "123",
 
-    args = parser.parse_args(list(argv) if argv is not None else None)
+) -> int:
 
-    for filename in args.files:
+    files_to_process = []
+    downloaded_paths = search_and_download(
+        collection_id=download_collection_id,
+        datetime_range=download_datetime_range,
+        out_path=Path(download_out_path),
+        limit=download_limit,
+        max_downloads=download_max,
+        extract=True,
+        asset_key=download_asset_key,
+    )
+    files_to_process.extend(str(p) for p in downloaded_paths)
+
+    for filename in files_to_process:
         try:
             calculate_LST_from_file(
                 filename,
-                args.shapepath,
-                args.epsg,
-                args.zona,
-                args.lon_name,
-                args.lat_name
+                shapepath,
+                epsg,
+                zona,
+                lon_name,
+                lat_name
             )
         except Exception as e:
             print(f"Exception calculating LST for file {filename}: \n{e}")
