@@ -18,6 +18,12 @@
 
 ## Approach
 
-    - Unable to use band extractor - provide bands instead of downloading entire image (only need 3 bands)
-    - Landsat level 2 collection: https://sesameo.destine.eu/collections/EO.NASA.DAT.LANDSAT.C2_L2
+    - Unable to use band extractor (sentinel-2 only)
+    - provide bands instead of downloading entire image (only need 3 bands)
+    - Use level 2 because it includes atmospheric corrections (not part of code?)
+    - Landsat level 2 collections:
+        https://sesameo.destine.eu/collections/EO.NASA.DAT.LANDSAT.C2_L2
+        https://data.destination-earth.eu/data-portfolio/EO.NASA.DAT.LANDSAT.C2_L2
     - Feed bands into LST calculation code
+    - The output from band extractor seems to be a file path. So I'm not sure if band extractor downloads file? Not sure if API key needs to be written in?
+    - So for now, stick with HDA / destinepyauth
