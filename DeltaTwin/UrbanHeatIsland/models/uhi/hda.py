@@ -11,11 +11,11 @@ from destinepyauth import get_token
 from tqdm import tqdm
 
 HDA_STAC_ENDPOINT = "https://hda.data.destination-earth.eu/stac/v2"
+STAC_DT_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 log = logging.getLogger("UrbanHeatIsland")
 log.setLevel(logging.INFO)
-
 
 def _get_auth_headers():
     """

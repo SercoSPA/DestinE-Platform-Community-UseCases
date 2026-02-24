@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import argparse
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Optional
 
 import xarray as xr
 import rioxarray as rio
@@ -385,16 +384,49 @@ def calculate_LST_from_file(
 
 
 def main(
-    download_collection_id = "XXXXX",
-    download_datetime_range = 1,
-    download_out_path = "./",
-    download_limit = 1,
-    download_max = 1,
-    download_asset_key = "123",
-
+    download_collection_id: str = "EO.NASA.DAT.LANDSAT.C2_L2",
+    download_datetime_range: str = "2025-07-01T00:00:00Z/2025-07-31T23:59:59Z",
+    download_out_path: str | Path = "./.delta",
+    download_limit: int = 10,
+    download_max: Optional[int] = 10,
+    shapepath: str = "path/to/shapefile.shp",
+    epsg: int = 4326,
+    zona: str = "Roma",
+    lon_name: str = "lon",
+    lat_name: str = "lat",
 ) -> int:
+    """Download Landsat products from HDA and compute LST for each product.
 
-    files_to_process = []
+    Parameters
+    ----------
+    download_collection_id : str
+        STAC collection identifier used to search products.
+    download_datetime_range : str
+        STAC datetime interval in the format start/end (UTC ISO-8601).
+    download_out_path : str | Path
+        Destination directory where ZIP files and extracted folders are written.
+    download_limit : int
+        Maximum number of products requested from the STAC search endpoint.
+    download_max : Optional[int]
+        Maximum number of products to actually download from search results.
+        Use None to download all returned products.
+    shapepath : str
+        Path to the shapefile used for municipal masking.
+    epsg : int
+        EPSG code used to reproject geometries before masking.
+    zona : str
+        Municipality name matched against the COMUNE field in the shapefile.
+    lon_name : str
+        Name of the longitude/x coordinate in the raster data.
+    lat_name : str
+        Name of the latitude/y coordinate in the raster data.
+
+    Returns
+    -------
+    int
+        Zero when processing completes.
+    """
+
     downloaded_paths = search_and_download(
         collection_id=download_collection_id,
         datetime_range=download_datetime_range,
@@ -402,14 +434,12 @@ def main(
         limit=download_limit,
         max_downloads=download_max,
         extract=True,
-        asset_key=download_asset_key,
     )
-    files_to_process.extend(str(p) for p in downloaded_paths)
 
-    for filename in files_to_process:
+    for filename in downloaded_paths:
         try:
             calculate_LST_from_file(
-                filename,
+                str(filename),
                 shapepath,
                 epsg,
                 zona,
