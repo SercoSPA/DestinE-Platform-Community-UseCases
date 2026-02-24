@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 
 import xarray as xr
 import rioxarray as rio
@@ -335,35 +335,58 @@ def create_geojson_per_zone(
 
 
 def calculate_LST_from_file(
-        filename: str,
+        files: Sequence[str | Path],
         shapepath: str,
         epsg: int,
         zona: str,
         lon_name: str,
         lat_name: str,
-    ):
-    nome = filename.split("/")[-1]
-    print(nome)
-    print(f"{filename}/{nome}_B5.TIF")
-    try:
-        # NIR
-        Band5 = rio.open_rasterio(f"{filename}/{nome}_B5.TIF").rio.reproject(
-            "EPSG:4326"
-        )
-        # RED
-        Band4 = rio.open_rasterio(f"{filename}/{nome}_B4.TIF").rio.reproject(
-            "EPSG:4326"
-        )
-        # TIRS 1
-        Band10 = rio.open_rasterio(f"{filename}/{nome}_B10.TIF").rio.reproject(
-            "EPSG:4326"
-        )
-    except Exception:
-        print("Data not available")
-        return
+    ) -> None:
+    file_paths = [Path(item) for item in files]
 
-    file_path = f"{filename}/{nome}_MTL.txt"
-    BT = calculate_brightness_temperature(Band10, file_path)
+    def _find_path(suffixes: Sequence[str]) -> Optional[Path]:
+        for candidate in file_paths:
+            candidate_name = candidate.name.upper()
+            for suffix in suffixes:
+                if candidate_name.endswith(suffix.upper()):
+                    return candidate
+        return None
+
+    band4_path = _find_path(["B4.TIF", "SR_B4.TIF"])
+    band5_path = _find_path(["B5.TIF", "SR_B5.TIF"])
+    band10_path = _find_path(["B10.TIF", "ST_B10.TIF"])
+    mtl_path = _find_path(["_MTL.TXT", "MTL.TXT"])
+
+    missing = []
+    if band4_path is None:
+        missing.append("B4")
+    if band5_path is None:
+        missing.append("B5")
+    if band10_path is None:
+        missing.append("B10")
+    if mtl_path is None:
+        missing.append("MTL")
+
+    if missing:
+        raise ValueError(
+            f"Missing required downloaded files: {missing}. "
+            f"Got: {[path.name for path in file_paths]}"
+        )
+
+    scene_name = band4_path.stem
+    for token in ["_SR_B4", "_B4", "_ST_B4"]:
+        if scene_name.upper().endswith(token):
+            scene_name = scene_name[: -len(token)]
+            break
+
+    print(f"Using inputs: {band4_path.name}, {band5_path.name}, {band10_path.name}, {mtl_path.name}")
+    output_dir = band4_path.parent
+
+    Band5 = rio.open_rasterio(str(band5_path)).rio.reproject("EPSG:4326")
+    Band4 = rio.open_rasterio(str(band4_path)).rio.reproject("EPSG:4326")
+    Band10 = rio.open_rasterio(str(band10_path)).rio.reproject("EPSG:4326")
+
+    BT = calculate_brightness_temperature(Band10, str(mtl_path))
     ndvi = ndvi_calculation(Band5, Band4)
     Pv = proportion_vegetation(ndvi.squeeze())
 
@@ -379,15 +402,15 @@ def calculate_LST_from_file(
     )
     da = np.round(da, 1)
     print(da)
-    da.to_dataset(name="LST").to_netcdf(f"{filename}/{nome}.nc")
-    da.rio.to_raster(f"{filename}/{nome}.tif")
+    da.to_dataset(name="LST").to_netcdf(str(output_dir / f"{scene_name}.nc"))
+    da.rio.to_raster(str(output_dir / f"{scene_name}.tif"))
 
 
 def main(
     download_collection_id: str = "EO.NASA.DAT.LANDSAT.C2_L2",
     download_datetime_range: str = "2025-07-01T00:00:00Z/2025-07-31T23:59:59Z",
     download_out_path: str | Path = "./.delta",
-    download_asset_suffixes: list[str] = ["B4.TIF", "B5.TIF", "B10.TIF"],
+    download_asset_suffixes: list[str] = ["B4.TIF", "B5.TIF", "B10.TIF", "MTL.TXT"],
     download_result_index: int = 0,
     download_limit: int = 1,
     shapepath: str = "path/to/shapefile.shp",
@@ -442,20 +465,18 @@ def main(
         limit=download_limit,
     )
     print(f"Downloaded files: {downloaded_paths}")
-    exit()
 
-    for filename in downloaded_paths:
-        try:
-            calculate_LST_from_file(
-                str(filename),
-                shapepath,
-                epsg,
-                zona,
-                lon_name,
-                lat_name
-            )
-        except Exception as e:
-            print(f"Exception calculating LST for file {filename}: \n{e}")
+    try:
+        calculate_LST_from_file(
+            downloaded_paths,
+            shapepath,
+            epsg,
+            zona,
+            lon_name,
+            lat_name,
+        )
+    except Exception as e:
+        print(f"Exception calculating LST from downloaded files: \n{e}")
 
     return 0
 
