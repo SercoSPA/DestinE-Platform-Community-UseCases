@@ -387,8 +387,9 @@ def main(
     download_collection_id: str = "EO.NASA.DAT.LANDSAT.C2_L2",
     download_datetime_range: str = "2025-07-01T00:00:00Z/2025-07-31T23:59:59Z",
     download_out_path: str | Path = "./.delta",
-    download_limit: int = 10,
-    download_max: Optional[int] = 10,
+    download_asset_suffixes: list[str] = ["B4.TIF", "B5.TIF", "B10.TIF"],
+    download_result_index: int = 0,
+    download_limit: int = 1,
     shapepath: str = "path/to/shapefile.shp",
     epsg: int = 4326,
     zona: str = "Roma",
@@ -407,9 +408,11 @@ def main(
         Destination directory where ZIP files and extracted folders are written.
     download_limit : int
         Maximum number of products requested from the STAC search endpoint.
-    download_max : Optional[int]
-        Maximum number of products to actually download from search results.
-        Use None to download all returned products.
+    download_asset_suffixes : list[str]
+        Suffixes used to select one asset key per suffix from the selected
+        search result (case-insensitive endswith match), e.g. ["B4.TIF", "B7.TIF"].
+    download_result_index : int
+        Index of the search result from which the asset is downloaded.
     shapepath : str
         Path to the shapefile used for municipal masking.
     epsg : int
@@ -427,14 +430,19 @@ def main(
         Zero when processing completes.
     """
 
+    if not download_asset_suffixes:
+        raise ValueError("download_asset_suffixes must contain at least one suffix.")
+
     downloaded_paths = search_and_download(
         collection_id=download_collection_id,
         datetime_range=download_datetime_range,
         out_path=Path(download_out_path),
+        asset_suffixes=download_asset_suffixes,
+        result_index=download_result_index,
         limit=download_limit,
-        max_downloads=download_max,
-        extract=True,
     )
+    print(f"Downloaded files: {downloaded_paths}")
+    exit()
 
     for filename in downloaded_paths:
         try:

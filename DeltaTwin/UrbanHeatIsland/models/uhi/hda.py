@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 import time
-import zipfile
 from pathlib import Path
+from urllib.parse import unquote, urlparse
 from typing import Any, Optional
 
 import requests
@@ -17,143 +17,10 @@ logging.getLogger(__name__).addHandler(logging.NullHandler())
 log = logging.getLogger("UrbanHeatIsland")
 log.setLevel(logging.INFO)
 
-def _get_auth_headers():
-    """
-    Get authentication headers for HDA STAC API requests.
-    
-    Uses the destinepyauth library to obtain an access token and formats
-    it as a Bearer token authorization header.
-    
-    Returns:
-        dict: Headers dictionary with Authorization bearer token
-    """
+
+def _get_auth_headers() -> dict[str, str]:
     access_token = get_token("hda").access_token
     return {"Authorization": f"Bearer {access_token}"}
-
-
-def _resolve_download_url(product: dict[str, Any], asset_key: Optional[str]) -> str:
-    assets = product.get("assets", {})
-    if asset_key and asset_key in assets and "href" in assets[asset_key]:
-        return assets[asset_key]["href"]
-
-    if "downloadLink" in assets and "href" in assets["downloadLink"]:
-        return assets["downloadLink"]["href"]
-
-    for asset in assets.values():
-        if isinstance(asset, dict) and "href" in asset:
-            return asset["href"]
-
-    raise KeyError(f"No downloadable asset found for product {product.get('id')}")
-
-
-def _download_product(
-    product: dict[str, Any],
-    auth_headers: dict[str, str],
-    out_path: Path,
-    asset_key: Optional[str] = None,
-    max_retries: int = 3,
-) -> Path:
-    """
-    Download a product from the HDA catalog.
-    
-    Downloads the product ZIP file with retry logic and progress tracking.
-    
-    Args:
-        product: STAC product feature dictionary containing ID and assets
-        auth_headers: Authentication headers for the download request
-        out_path: Directory where the downloaded ZIP file will be saved
-    
-    Returns:
-        Path: Path to the downloaded ZIP file
-    
-    Raises:
-        KeyError: If downloadLink asset is not found in product
-        requests.RequestException: If download fails after all retries
-    """
-    log.info(f"\n=== Downloading: {product['id']} ===")
-
-    download_url = _resolve_download_url(product, asset_key)
-    filename = out_path / f"{product['id']}.zip"
-
-    log.info(f"Downloading full product to: {filename}")
-    log.info(f"URL: {download_url}")
-
-    for attempt in range(max_retries):
-        try:
-            response = requests.get(download_url, headers=auth_headers, stream=True, timeout=30)
-            response.raise_for_status()
-
-            total_size = int(response.headers.get('content-length', 0))
-
-            with tqdm(total=total_size, unit='B', unit_scale=True, desc=str(filename)) as progress_bar:
-                with open(filename, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-                            progress_bar.update(len(chunk))
-
-            log.info(f"\nDownload complete: {filename}")
-            return filename
-            
-        except (requests.RequestException, OSError) as e:
-            if attempt < max_retries - 1:
-                log.warning(f"Download failed (attempt {attempt + 1}/{max_retries}): {e}. Retrying in 5s...")
-                time.sleep(5)
-            else:
-                log.error(f"Download failed after {max_retries} attempts")
-                raise
-
-
-def _print_search_results(response: requests.Response) -> None:
-    """
-    Log details of the STAC API search response.
-    
-    Displays the number of products found and basic information about each,
-    including product ID, datetime, and available assets.
-    
-    Args:
-        response: HTTP response from the STAC search endpoint
-    
-    Raises:
-        Exception: If response status code is not 200
-    """
-    # print result info
-    log.info(f"Status Code: {response.status_code}")
-    if response.status_code == 200:
-        results = response.json()
-        log.info(f"\nFound {len(results.get('features', []))} products")
-    
-        # Display results
-        for idx, feature in enumerate(results.get('features', [])):
-            log.info(f"\n--- Product {idx + 1} ---")
-            log.info(f"ID: {feature.get('id')}")
-            log.info(f"Datetime: {feature.get('properties', {}).get('datetime')}")
-            log.info(f"Assets: {list(feature.get('assets', {}).keys())}")
-    else:
-        log.info(f"Error: {response.text}")
-        response.raise_for_status()
-
-
-def _extract_zip(zip_filename: Path, out_path: Path) -> Path:
-    """
-    Extract a ZIP archive to a folder named after the ZIP stem.
-    
-    Args:
-        zip_filename: Path to the ZIP file to extract
-        out_path: Base directory where extraction subdirectory will be created
-    
-    Returns:
-        Path: Path to the extraction directory
-    """
-    log.info(f"\n=== Extracting {zip_filename} ===")
-    
-    extract_dir = out_path / Path(zip_filename).stem
-    extract_dir.mkdir(exist_ok=True, parents=True)
-    
-    with zipfile.ZipFile(zip_filename, 'r') as zip_ref:
-        zip_ref.extractall(path=extract_dir)
-    
-    return extract_dir
 
 
 def search_products(
@@ -170,57 +37,222 @@ def search_products(
         "limit": limit,
     }
     response = requests.post(f"{endpoint}/search", headers=auth_headers, json=payload, timeout=60)
-    _print_search_results(response)
+    response.raise_for_status()
+
     results = response.json()
-    return results.get("features", [])
+    features = results.get("features", [])
+    log.info(f"Found {len(features)} products")
+
+    for idx, feature in enumerate(features):
+        log.info(f"--- Product {idx} ---")
+        log.info(f"ID: {feature.get('id')}")
+        log.info(f"Datetime: {feature.get('properties', {}).get('datetime')}")
+        log.info(f"Assets: {list(feature.get('assets', {}).keys())}")
+
+    return features
+
+
+def list_asset_keys(product: dict[str, Any]) -> list[str]:
+    """Return all asset keys available in one STAC product feature."""
+    return list(product.get("assets", {}).keys())
+
+
+def _resolve_asset_url(product: dict[str, Any], asset_key: str) -> str:
+    assets = product.get("assets", {})
+    if asset_key not in assets or "href" not in assets[asset_key]:
+        available = ", ".join(sorted(assets.keys()))
+        raise KeyError(
+            f"Asset '{asset_key}' not found for product {product.get('id')}. "
+            f"Available assets: [{available}]"
+        )
+    return assets[asset_key]["href"]
+
+
+def resolve_asset_key_by_suffix(product: dict[str, Any], asset_suffix: str) -> str:
+    """Resolve exactly one asset key by suffix match (case-insensitive)."""
+    if not asset_suffix:
+        raise ValueError("asset_suffix must be a non-empty string")
+
+    suffix_norm = asset_suffix.lower()
+    keys = list_asset_keys(product)
+    matches = [key for key in keys if key.lower().endswith(suffix_norm)]
+
+    if not matches:
+        available = ", ".join(sorted(keys))
+        raise KeyError(
+            f"No asset key ends with '{asset_suffix}' for product {product.get('id')}. "
+            f"Available assets: [{available}]"
+        )
+
+    if len(matches) > 1:
+        raise ValueError(
+            f"Multiple asset keys end with '{asset_suffix}' for product {product.get('id')}: {matches}. "
+            "Please provide a more specific suffix."
+        )
+
+    return matches[0]
+
+
+def _open_download_stream(
+    asset_url: str,
+    auth_headers: dict[str, str],
+    max_pointer_hops: int = 2,
+) -> tuple[requests.Response, str]:
+    """Open stream and resolve JSON pointer payloads containing {'href': ...}."""
+    current_url = asset_url
+    use_auth = True
+
+    for hop in range(max_pointer_hops + 1):
+        headers = auth_headers if use_auth else None
+        response = requests.get(current_url, headers=headers, stream=True, timeout=(30, 300))
+        response.raise_for_status()
+
+        content_type = (response.headers.get("content-type") or "").lower()
+        if "json" in content_type:
+            payload = response.json()
+            response.close()
+
+            next_url = payload.get("href") if isinstance(payload, dict) else None
+            if next_url:
+                log.info(f"Resolved asset pointer hop {hop + 1}")
+                current_url = str(next_url)
+                use_auth = False
+                continue
+
+            raise ValueError("JSON response did not contain an 'href' for downloadable content")
+
+        return response, current_url
+
+    raise ValueError(f"Too many pointer hops while resolving URL: {asset_url}")
+
+
+def _choose_output_filename(
+    response: requests.Response,
+    resolved_url: str,
+    product_id: str,
+    asset_key: str,
+) -> str:
+    content_disposition = response.headers.get("content-disposition") or ""
+    if "filename=" in content_disposition:
+        filename_part = content_disposition.split("filename=")[-1].strip().strip('"')
+        if filename_part:
+            return Path(unquote(filename_part)).name
+
+    url_name = Path(unquote(urlparse(resolved_url).path)).name
+    if url_name and "." in url_name:
+        return url_name
+
+    safe_asset = asset_key.replace("/", "_").replace(" ", "_")
+    return f"{product_id}_{safe_asset}.bin"
+
+
+def _download_asset(
+    product: dict[str, Any],
+    asset_key: str,
+    out_path: Path,
+    max_retries: int = 3,
+) -> Path:
+    product_id = product.get("id", "unknown-product")
+    auth_headers = _get_auth_headers()
+    asset_url = _resolve_asset_url(product, asset_key)
+
+    log.info(f"=== Downloading product '{product_id}', asset '{asset_key}' ===")
+    log.info(f"Asset URL: {asset_url}")
+
+    for attempt in range(max_retries):
+        response: Optional[requests.Response] = None
+        tmp_path: Optional[Path] = None
+        final_path: Optional[Path] = None
+
+        try:
+            response, resolved_url = _open_download_stream(asset_url, auth_headers)
+            filename = _choose_output_filename(response, resolved_url, product_id, asset_key)
+
+            out_path.mkdir(exist_ok=True, parents=True)
+            final_path = out_path / filename
+            tmp_path = out_path / f"{filename}.part"
+
+            if final_path.exists():
+                final_path.unlink()
+            if tmp_path.exists():
+                tmp_path.unlink()
+
+            total_size = int(response.headers.get("content-length", 0))
+            bytes_written = 0
+
+            with tqdm(total=total_size if total_size > 0 else None, unit="B", unit_scale=True, desc=filename) as progress_bar:
+                with open(tmp_path, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                            bytes_written += len(chunk)
+                            progress_bar.update(len(chunk))
+
+            if total_size > 0 and bytes_written != total_size:
+                raise IOError(
+                    f"Incomplete download for {product_id}/{asset_key}: expected {total_size}, got {bytes_written}"
+                )
+
+            tmp_path.replace(final_path)
+            log.info(f"Download complete: {final_path}")
+            return final_path
+
+        except Exception as e:
+            if tmp_path is not None and tmp_path.exists():
+                tmp_path.unlink()
+            if attempt < max_retries - 1:
+                log.warning(f"Attempt {attempt + 1}/{max_retries} failed: {e}. Retrying in 5s...")
+                time.sleep(5)
+            else:
+                raise
+        finally:
+            if response is not None:
+                response.close()
+
+    raise RuntimeError("Download failed unexpectedly")
 
 
 def search_and_download(
     collection_id: str,
     datetime_range: str,
     out_path: Path,
+    asset_suffixes: list[str],
+    result_index: int = 0,
     limit: int = 10,
-    max_downloads: Optional[int] = None,
-    extract: bool = True,
-    asset_key: Optional[str] = None,
     endpoint: str = HDA_STAC_ENDPOINT,
 ) -> list[Path]:
-    """Search STAC items and download matching assets.
+    """Search products, pick one result by index, and download one asset per suffix.
 
-    Returns extracted directories if extract=True, otherwise ZIP paths.
+    Asset selection is based on case-insensitive endswith suffix matching.
     """
-    out_path.mkdir(exist_ok=True, parents=True)
-    log.info(f"Output directory: {out_path}")
+    if not asset_suffixes:
+        raise ValueError("asset_suffixes must contain at least one suffix")
 
-    auth_headers = _get_auth_headers()
-    payload = {
-        "collections": [collection_id],
-        "datetime": datetime_range,
-        "limit": limit,
-    }
-    response = requests.post(f"{endpoint}/search", headers=auth_headers, json=payload, timeout=60)
-    _print_search_results(response)
-
-    results = response.json()
-    features = results.get("features", [])
+    features = search_products(
+        collection_id=collection_id,
+        datetime_range=datetime_range,
+        limit=limit,
+        endpoint=endpoint,
+    )
     if not features:
-        log.info("No products found for the given criteria")
-        return []
+        raise ValueError("No products found for the given criteria")
+    if result_index < 0 or result_index >= len(features):
+        raise IndexError(f"result_index={result_index} out of range for {len(features)} results")
 
-    if max_downloads is not None:
-        features = features[:max_downloads]
+    selected = features[result_index]
+    log.info(f"Selected result index {result_index}: {selected.get('id')}")
+    log.info(f"Available assets: {list_asset_keys(selected)}")
 
-    output_paths: list[Path] = []
-    for product in features:
-        zip_file = _download_product(
-            product=product,
-            auth_headers=auth_headers,
-            out_path=out_path,
-            asset_key=asset_key,
+    downloaded_paths: list[Path] = []
+    for suffix in asset_suffixes:
+        selected_asset_key = resolve_asset_key_by_suffix(selected, suffix)
+        log.info(f"Suffix '{suffix}' -> asset key: {selected_asset_key}")
+        downloaded_paths.append(
+            _download_asset(
+                product=selected,
+                asset_key=selected_asset_key,
+                out_path=out_path,
+            )
         )
-        if extract:
-            output_paths.append(_extract_zip(zip_file, out_path))
-        else:
-            output_paths.append(zip_file)
 
-    return output_paths
+    return downloaded_paths
