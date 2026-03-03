@@ -1,0 +1,10 @@
+ipython
+ipykernel
+eodag
+rich
+xarray
+matplotlib
+netcdf4
+h5netcdf
+cfgrib
+eccodes
