@@ -7,6 +7,7 @@ from urllib.parse import unquote, urlparse
 from typing import Any, Optional
 
 import requests
+from requests.exceptions import HTTPError
 from destinepyauth import get_token
 from tqdm import tqdm
 
@@ -25,7 +26,7 @@ def _get_auth_headers() -> dict[str, str]:
 
 def search_products(
     collection_id: str,
-    datetime_range: str,
+    datetime_range: str | None = None,
     limit: int = 10,
     endpoint: str = HDA_STAC_ENDPOINT,
 ) -> list[dict[str, Any]]:
@@ -33,11 +34,15 @@ def search_products(
     auth_headers = _get_auth_headers()
     payload = {
         "collections": [collection_id],
-        "datetime": datetime_range,
         "limit": limit,
     }
+    if datetime_range is not None:
+        payload["date"] = datetime_range
     response = requests.post(f"{endpoint}/search", headers=auth_headers, json=payload, timeout=60)
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except HTTPError:
+        raise HTTPError(f"Bad search ({response.status_code}) \n{response.text}")
 
     results = response.json()
     features = results.get("features", [])

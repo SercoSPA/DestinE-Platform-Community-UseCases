@@ -413,7 +413,7 @@ def main(
     download_asset_suffixes: list[str] = ["B4.TIF", "B5.TIF", "B10.TIF", "MTL.TXT"],
     download_result_index: int = 0,
     download_limit: int = 1,
-    shapepath: str = "path/to/shapefile.shp",
+    shapepath: str = "/to/shapefile.shp",
     epsg: int = 4326,
     zona: str = "Roma",
     lon_name: str = "lon",
