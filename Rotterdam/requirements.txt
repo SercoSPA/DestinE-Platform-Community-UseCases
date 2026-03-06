@@ -8,3 +8,9 @@ netcdf4
 h5netcdf
 cfgrib
 eccodes
+dask[distributed]
+destinepyauth
+zarr
+aiohttp
+cartopy
+numpy
