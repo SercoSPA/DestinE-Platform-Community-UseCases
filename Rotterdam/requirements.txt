@@ -12,5 +12,6 @@ dask[distributed]
 destinepyauth
 zarr
 aiohttp
+requests
 cartopy
 numpy
