@@ -3,6 +3,7 @@ ipykernel
 eodag
 rich
 xarray
+rioxarray
 matplotlib
 netcdf4
 h5netcdf
