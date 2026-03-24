@@ -344,18 +344,17 @@ def calculate_LST_from_file(
     ) -> None:
     file_paths = [Path(item) for item in files]
 
-    def _find_path(suffixes: Sequence[str]) -> Optional[Path]:
+    def _find_path(suffix: str) -> Optional[Path]:
         for candidate in file_paths:
             candidate_name = candidate.name.upper()
-            for suffix in suffixes:
-                if candidate_name.endswith(suffix.upper()):
-                    return candidate
+            if candidate_name.endswith(suffix.upper()):
+                return candidate
         return None
 
-    band4_path = _find_path(["B4.TIF", "SR_B4.TIF"])
-    band5_path = _find_path(["B5.TIF", "SR_B5.TIF"])
-    band10_path = _find_path(["B10.TIF", "ST_B10.TIF"])
-    mtl_path = _find_path(["_MTL.TXT", "MTL.TXT"])
+    band4_path = _find_path("B4.TIF")
+    band5_path = _find_path("B5.TIF")
+    band10_path = _find_path("B10.TIF")
+    mtl_path = _find_path("MTL.TXT")
 
     missing = []
     if band4_path is None:
@@ -413,7 +412,7 @@ def main(
     download_asset_suffixes: list[str] = ["B4.TIF", "B5.TIF", "B10.TIF", "MTL.TXT"],
     download_result_index: int = 0,
     download_limit: int = 1,
-    shapepath: str = "/to/shapefile.shp",
+    shapepath: str = "shapefile.shp",
     epsg: int = 4326,
     zona: str = "Roma",
     lon_name: str = "lon",
@@ -464,7 +463,6 @@ def main(
         result_index=download_result_index,
         limit=download_limit,
     )
-    print(f"Downloaded files: {downloaded_paths}")
 
     try:
         calculate_LST_from_file(
