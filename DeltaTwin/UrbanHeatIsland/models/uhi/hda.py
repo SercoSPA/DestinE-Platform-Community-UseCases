@@ -37,7 +37,9 @@ def search_products(
         "limit": limit,
     }
     if datetime_range is not None:
-        payload["date"] = datetime_range
+        payload["datetime"] = datetime_range
+
+    log.info(f"Search payload: {payload}")
     response = requests.post(f"{endpoint}/search", headers=auth_headers, json=payload, timeout=60)
     try:
         response.raise_for_status()
@@ -223,7 +225,7 @@ def search_and_download(
     out_path: Path,
     asset_suffixes: list[str],
     result_index: int = 0,
-    limit: int = 10,
+    limit: int = 1,
     endpoint: str = HDA_STAC_ENDPOINT,
 ) -> list[Path]:
     """Search products, pick one result by index, and download one asset per suffix.
