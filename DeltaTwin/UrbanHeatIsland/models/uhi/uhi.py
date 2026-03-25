@@ -140,6 +140,37 @@ def mask(
 
     return da * mask_array
 
+
+_NUTS3_GEOJSON_URL = (
+    "https://gisco-services.ec.europa.eu/distribution/v2/nuts/geojson/"
+    "NUTS_RG_01M_2021_4326_LEVL_3.geojson"
+)
+
+
+def mask_nuts3(
+    nuts3_code: str,
+    da: xr.DataArray,
+) -> xr.DataArray:
+    """Mask a DataArray to a NUTS3 region using Eurostat GISCO boundaries.
+
+    Parameters
+    ----------
+    nuts3_code : str
+        NUTS3 region code, e.g. ``"ITI43"`` for the Province of Rome.
+    da : xr.DataArray
+        DataArray to mask (must already be in EPSG:4326, as produced by
+        ``rioxarray``'s ``rio.reproject``).
+    """
+    nuts3 = gpd.read_file(_NUTS3_GEOJSON_URL)
+    region = nuts3[nuts3["NUTS_ID"] == nuts3_code]
+    if region.empty:
+        raise ValueError(
+            f"NUTS3 region '{nuts3_code}' not found. "
+            "Check the code against the Eurostat NUTS classification."
+        )
+    print(f"Using NUTS3 region: {region['NUTS_NAME'].iloc[0]} ({nuts3_code})")
+    return da.rio.clip(region.geometry.values, crs=region.crs, drop=False, all_touched=True)
+
 def raster(da: xr.DataArray, tiffname: str) -> None:
     return da.rio.to_raster(tiffname)
 
@@ -336,11 +367,7 @@ def create_geojson_per_zone(
 
 def calculate_LST_from_file(
         files: Sequence[str | Path],
-        shapepath: str,
-        epsg: int,
-        zona: str,
-        lon_name: str,
-        lat_name: str,
+        nuts3_code: str,
     ) -> None:
     file_paths = [Path(item) for item in files]
 
@@ -391,14 +418,7 @@ def calculate_LST_from_file(
 
     emissivity = calculate_land_emissivity(ndvi.squeeze(), Pv)
     LST = calculate_LST(BT, emissivity)
-    da = mask(
-        shapepath,
-        LST,
-        epsg=epsg,
-        zona=zona,
-        lon_name=lon_name,
-        lat_name=lat_name,
-    )
+    da = mask_nuts3(nuts3_code, LST)
     da = np.round(da, 1)
     print(da)
     da.to_dataset(name="LST").to_netcdf(str(output_dir / f"{scene_name}.nc"))
@@ -412,11 +432,7 @@ def main(
     download_asset_suffixes: list[str] = ["B4.TIF", "B5.TIF", "B10.TIF", "MTL.TXT"],
     download_result_index: int = 0,
     download_limit: int = 1,
-    shapepath: str = "shapefile.shp",
-    epsg: int = 4326,
-    zona: str = "Roma",
-    lon_name: str = "lon",
-    lat_name: str = "lat",
+    nuts3_code: str = "ITI43",
 ) -> int:
     """Download Landsat products from HDA and compute LST for each product.
 
@@ -435,16 +451,9 @@ def main(
         search result (case-insensitive endswith match), e.g. ["B4.TIF", "B7.TIF"].
     download_result_index : int
         Index of the search result from which the asset is downloaded.
-    shapepath : str
-        Path to the shapefile used for municipal masking.
-    epsg : int
-        EPSG code used to reproject geometries before masking.
-    zona : str
-        Municipality name matched against the COMUNE field in the shapefile.
-    lon_name : str
-        Name of the longitude/x coordinate in the raster data.
-    lat_name : str
-        Name of the latitude/y coordinate in the raster data.
+    nuts3_code : str
+        Eurostat NUTS3 region code used for masking, e.g. ``"ITI43"`` for
+        the Province of Rome (Metropolitan City of Rome Capital).
 
     Returns
     -------
@@ -467,11 +476,7 @@ def main(
     try:
         calculate_LST_from_file(
             downloaded_paths,
-            shapepath,
-            epsg,
-            zona,
-            lon_name,
-            lat_name,
+            nuts3_code,
         )
     except Exception as e:
         print(f"Exception calculating LST from downloaded files: \n{e}")
