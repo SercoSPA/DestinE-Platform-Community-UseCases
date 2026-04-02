@@ -464,14 +464,30 @@ def main(
     if not download_asset_suffixes:
         raise ValueError("download_asset_suffixes must contain at least one suffix.")
 
-    downloaded_paths = search_and_download(
-        collection_id=download_collection_id,
-        datetime_range=download_datetime_range,
-        out_path=Path(download_out_path),
-        asset_suffixes=download_asset_suffixes,
-        result_index=download_result_index,
-        limit=download_limit,
-    )
+    out_path = Path(download_out_path)
+    existing_paths: list[Path] = []
+    if out_path.exists():
+        all_files = list(out_path.rglob("*"))
+        for suffix in download_asset_suffixes:
+            match = next(
+                (f for f in all_files if f.is_file() and f.name.upper().endswith(suffix.upper())),
+                None,
+            )
+            if match is not None:
+                existing_paths.append(match)
+
+    if len(existing_paths) == len(download_asset_suffixes):
+        print(f"All {len(existing_paths)} required files already exist, skipping download.")
+        downloaded_paths = existing_paths
+    else:
+        downloaded_paths = search_and_download(
+            collection_id=download_collection_id,
+            datetime_range=download_datetime_range,
+            out_path=Path(download_out_path),
+            asset_suffixes=download_asset_suffixes,
+            result_index=download_result_index,
+            limit=download_limit,
+        )
 
     try:
         calculate_LST_from_file(
