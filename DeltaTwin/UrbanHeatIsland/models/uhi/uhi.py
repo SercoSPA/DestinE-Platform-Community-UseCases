@@ -367,7 +367,7 @@ def create_geojson_per_zone(
 
 def calculate_LST_from_file(
         files: Sequence[str | Path],
-        nuts3_code: str,
+        nuts3_code: Optional[str],
     ) -> None:
     file_paths = [Path(item) for item in files]
 
@@ -418,11 +418,13 @@ def calculate_LST_from_file(
 
     emissivity = calculate_land_emissivity(ndvi.squeeze(), Pv)
     LST = calculate_LST(BT, emissivity)
-    da = mask_nuts3(nuts3_code, LST)
+    LST = LST.rio.write_crs("EPSG:4326")
+    da = mask_nuts3(nuts3_code, LST) if nuts3_code is not None else LST
     da = np.round(da, 1)
-    print(da)
-    da.to_dataset(name="LST").to_netcdf(str(output_dir / f"{scene_name}.nc"))
-    da.rio.to_raster(str(output_dir / f"{scene_name}.tif"))
+    filename = str(output_dir / f"{scene_name}_LST")
+    print(f"saving LST data to file: {filename}")
+    # da.to_dataset(name="LST").to_netcdf(f"{filename}.nc"))
+    da.rio.to_raster(f"{filename}.tif")
 
 
 def main(
@@ -432,7 +434,8 @@ def main(
     download_asset_suffixes: list[str] = ["B4.TIF", "B5.TIF", "B10.TIF", "MTL.TXT"],
     download_result_index: int = 0,
     download_limit: int = 1,
-    nuts3_code: str = "ITI43",
+    # nuts3_code: Optional[str] = "ITI43",
+    nuts3_code: Optional[str] = None,
 ) -> int:
     """Download Landsat products from HDA and compute LST for each product.
 
@@ -451,9 +454,10 @@ def main(
         search result (case-insensitive endswith match), e.g. ["B4.TIF", "B7.TIF"].
     download_result_index : int
         Index of the search result from which the asset is downloaded.
-    nuts3_code : str
+    nuts3_code : str or None
         Eurostat NUTS3 region code used for masking, e.g. ``"ITI43"`` for
         the Province of Rome (Metropolitan City of Rome Capital).
+        Pass ``None`` to skip masking and return LST for the full scene.
 
     Returns
     -------
