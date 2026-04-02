@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -14,7 +15,87 @@ import rasterio
 import warnings
 from shapely.geometry import Polygon
 
-from hda import search_and_download
+from eodag import EODataAccessGateway
+
+
+def search_and_download(
+    collection_id: str,
+    datetime_range: str,
+    out_path: Path,
+    asset_suffixes: list[str],
+    result_index: int = 0,
+    limit: int = 1,
+) -> list[Path]:
+    """Search and download a Landsat product via EODAG/DEDL.
+
+    Credentials are read from the ``DESP_USERNAME`` and ``DESP_PASSWORD``
+    environment variables (same as the DestinE Platform notebook pattern).
+
+    Parameters
+    ----------
+    collection_id:
+        STAC ``productType`` identifier, e.g. ``"EO.NASA.DAT.LANDSAT.C2_L2"``.
+    datetime_range:
+        ISO-8601 interval ``"start/end"``, e.g.
+        ``"2025-07-01T00:00:00Z/2025-07-31T23:59:59Z"``.
+    out_path:
+        Destination directory for the downloaded product.
+    asset_suffixes:
+        File-name suffixes to locate in the downloaded product (case-insensitive),
+        e.g. ``["B4.TIF", "B5.TIF", "B10.TIF", "MTL.TXT"]``.
+    result_index:
+        Index of the search result to download.
+    limit:
+        Maximum number of results to request from the STAC search.
+
+    Returns
+    -------
+    list[Path]
+        One :class:`~pathlib.Path` per entry in *asset_suffixes* (only those found).
+    """
+    username = os.environ.get("DESPAUTH_USER", "")
+    password = os.environ.get("DESPAUTH_PASSWORD", "")
+    if username:
+        os.environ["EODAG__DEDL__AUTH__CREDENTIALS__USERNAME"] = username
+    if password:
+        os.environ["EODAG__DEDL__AUTH__CREDENTIALS__PASSWORD"] = password
+    os.environ.setdefault("EODAG__DEDL__PRIORITY", "10")
+
+    dag = EODataAccessGateway()
+
+    start_str, end_str = datetime_range.split("/", 1)
+
+    results = dag.search(
+        provider="dedl",
+        productType=collection_id,
+        start=start_str,
+        end=end_str,
+        items_per_page=limit,
+    )
+    if not results:
+        raise ValueError("No products found for the given criteria.")
+    if result_index >= len(results):
+        raise IndexError(
+            f"result_index={result_index} out of range for {len(results)} result(s)."
+        )
+
+    product = results[result_index]
+    print(f"Selected product: {product.properties.get('id', product)}")
+
+    downloaded = Path(dag.download(product, output_dir=str(out_path)))
+    all_files = list(downloaded.rglob("*")) if downloaded.is_dir() else [downloaded]
+
+    found: list[Path] = []
+    for suffix in asset_suffixes:
+        match = next(
+            (f for f in all_files if f.is_file() and f.name.upper().endswith(suffix.upper())),
+            None,
+        )
+        if match is not None:
+            found.append(match)
+        else:
+            print(f"Warning: no downloaded file found with suffix '{suffix}' in {downloaded}")
+    return found
 
 
 def extract_parameter_value(file_path: str, parameter_name: str) -> Optional[float]:
@@ -428,8 +509,9 @@ def calculate_LST_from_file(
 
 
 def main(
-    download_collection_id: str = "EO.NASA.DAT.LANDSAT.C2_L2",
-    download_datetime_range: str = "2025-07-01T00:00:00Z/2025-07-31T23:59:59Z",
+    # download_collection_id: str = "EO.NASA.DAT.LANDSAT.C2_L2",
+    download_collection_id: str = "LANDSAT_C2L2",
+    download_datetime_range: str = "2026-03-01T00:00:00Z/2026-03-31T23:59:59Z",
     download_out_path: str | Path = "./.delta",
     download_asset_suffixes: list[str] = ["B4.TIF", "B5.TIF", "B10.TIF", "MTL.TXT"],
     download_result_index: int = 0,
