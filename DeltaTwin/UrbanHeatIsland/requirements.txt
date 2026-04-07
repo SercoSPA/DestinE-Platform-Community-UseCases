@@ -6,5 +6,5 @@ regionmask
 cartopy
 scipy
 rioxarray
-eodag
+eodag>=4.0
 ipykernel

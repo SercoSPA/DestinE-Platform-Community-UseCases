@@ -91,7 +91,7 @@ def search_and_download(
 
     results = dag.search(
         provider="dedl",
-        productType=collection_id,
+        collection=collection_id,
         start=start,
         end=end,
         limit=limit,
