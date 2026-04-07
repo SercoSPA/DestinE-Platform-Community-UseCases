@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from typing import Optional, Sequence
 
+import matplotlib.pyplot as plt
 import xarray as xr
 import rioxarray as rio
 import pandas as pd
@@ -26,6 +27,7 @@ def search_and_download(
     asset_suffixes: list[str],
     result_index: int = 0,
     limit: int = 20,
+    nuts3_code: Optional[str] = None,
 ) -> list[Path]:
     """Search and download a Landsat product via EODAG/DEDL.
 
@@ -48,6 +50,10 @@ def search_and_download(
         Index of the search result to download.
     limit:
         Maximum number of results to request from the STAC search.
+    nuts3_code:
+        Optional Eurostat NUTS3 region code (e.g. ``"ITI43"`` for the Province
+        of Rome).  When provided, the region's geometry is used as a spatial
+        filter so that only products intersecting the region are returned.
 
     Returns
     -------
@@ -67,12 +73,29 @@ def search_and_download(
 
     start, end = datetime_range.split("/", 1)
 
+    search_kwargs: dict = {}
+    if nuts3_code is not None:
+        nuts3 = gpd.read_file(_NUTS3_GEOJSON_URL)
+        region = nuts3[nuts3["NUTS_ID"] == nuts3_code]
+        if region.empty:
+            raise ValueError(
+                f"NUTS3 region '{nuts3_code}' not found. "
+                "Check the code against the Eurostat NUTS classification."
+            )
+        geom = region.geometry.union_all()
+        search_kwargs["geom"] = geom.wkt
+        print(
+            f"Spatial filter: NUTS3 region '{nuts3_code}' "
+            f"({region['NUTS_NAME'].iloc[0]})"
+        )
+
     results = dag.search(
         provider="dedl",
         productType=collection_id,
         start=start,
         end=end,
         limit=limit,
+        **search_kwargs,
     )
     if not results:
         raise ValueError("No products found for the given criteria.")
@@ -448,6 +471,43 @@ def create_geojson_per_zone(
         return None
 
 
+def plot_lst(
+    da: xr.DataArray,
+    png_path: str,
+    title: str = "Land Surface Temperature",
+) -> None:
+    """Plot a LST DataArray and save it as a PNG file.
+
+    Parameters
+    ----------
+    da:
+        LST DataArray in degrees Celsius (2-D, EPSG:4326).
+    png_path:
+        Destination file path for the PNG output.
+    title:
+        Title shown at the top of the figure.
+    """
+    data = da.squeeze().values
+    lons = da.x.values
+    lats = da.y.values
+
+    vmin = float(np.nanpercentile(data, 2))
+    vmax = float(np.nanpercentile(data, 98))
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    img = ax.pcolormesh(lons, lats, data, cmap="RdYlBu_r", vmin=vmin, vmax=vmax)
+    cbar = fig.colorbar(img, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label("LST (°C)", fontsize=11)
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    ax.set_title(title, fontsize=13)
+    ax.set_aspect("equal")
+    fig.tight_layout()
+    fig.savefig(png_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"LST plot saved to: {png_path}")
+
+
 def calculate_LST_from_file(
         files: Sequence[str | Path],
         nuts3_code: Optional[str],
@@ -503,11 +563,15 @@ def calculate_LST_from_file(
     LST = calculate_LST(BT, emissivity)
     LST = LST.rio.write_crs("EPSG:4326")
     da = mask_nuts3(nuts3_code, LST) if nuts3_code is not None else LST
+    # da = LST
     da = np.round(da, 1)
+    da = da.astype(np.float32)
+    da = da.rio.write_nodata(np.nan)
     filename = str(output_dir / f"{scene_name}_LST")
     print(f"saving LST data to file: {filename}")
     # da.to_dataset(name="LST").to_netcdf(f"{filename}.nc"))
     da.rio.to_raster(f"{filename}.tif")
+    plot_lst(da, f"{filename}.png", title=scene_name)
 
 
 def main(
@@ -518,8 +582,8 @@ def main(
     download_asset_suffixes: list[str] = ["B4.TIF", "B5.TIF", "B10.TIF", "MTL.TXT"],
     download_result_index: int = 0,
     download_limit: int = 10,
-    # nuts3_code: Optional[str] = "ITI43",
-    nuts3_code: Optional[str] = None,
+    nuts3_code: Optional[str] = "ITI43",
+    # nuts3_code: Optional[str] = None,
 ) -> int:
     """Download Landsat products from HDA and compute LST for each product.
 
@@ -575,6 +639,7 @@ def main(
             asset_suffixes=download_asset_suffixes,
             result_index=download_result_index,
             limit=download_limit,
+            nuts3_code=nuts3_code,
         )
 
     try:
