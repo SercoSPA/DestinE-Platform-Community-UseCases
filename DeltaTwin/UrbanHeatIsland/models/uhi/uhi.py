@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import os
 from pathlib import Path
 from typing import Optional, Sequence
@@ -24,7 +25,7 @@ def search_and_download(
     out_path: Path,
     asset_suffixes: list[str],
     result_index: int = 0,
-    limit: int = 1,
+    limit: int = 20,
 ) -> list[Path]:
     """Search and download a Landsat product via EODAG/DEDL.
 
@@ -59,18 +60,19 @@ def search_and_download(
         os.environ["EODAG__DEDL__AUTH__CREDENTIALS__USERNAME"] = username
     if password:
         os.environ["EODAG__DEDL__AUTH__CREDENTIALS__PASSWORD"] = password
-    os.environ.setdefault("EODAG__DEDL__PRIORITY", "10")
+    os.environ["EODAG__DEDL__PRIORITY"] = "10"
+    os.environ["EODAG__DEDL__SEARCH__TIMEOUT"] = "60"
 
     dag = EODataAccessGateway()
 
-    start_str, end_str = datetime_range.split("/", 1)
+    start, end = datetime_range.split("/", 1)
 
     results = dag.search(
         provider="dedl",
         productType=collection_id,
-        start=start_str,
-        end=end_str,
-        items_per_page=limit,
+        start=start,
+        end=end,
+        limit=limit,
     )
     if not results:
         raise ValueError("No products found for the given criteria.")
@@ -511,11 +513,11 @@ def calculate_LST_from_file(
 def main(
     # download_collection_id: str = "EO.NASA.DAT.LANDSAT.C2_L2",
     download_collection_id: str = "LANDSAT_C2L2",
-    download_datetime_range: str = "2026-03-01T00:00:00Z/2026-03-31T23:59:59Z",
+    download_datetime_range: str = "2026-03-01/2026-04-01",
     download_out_path: str | Path = "./.delta",
     download_asset_suffixes: list[str] = ["B4.TIF", "B5.TIF", "B10.TIF", "MTL.TXT"],
     download_result_index: int = 0,
-    download_limit: int = 1,
+    download_limit: int = 10,
     # nuts3_code: Optional[str] = "ITI43",
     nuts3_code: Optional[str] = None,
 ) -> int:
