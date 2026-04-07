@@ -471,6 +471,53 @@ def create_geojson_per_zone(
         return None
 
 
+def plot_rgb(
+    band4: xr.DataArray,
+    band3: xr.DataArray,
+    band2: xr.DataArray,
+    png_path: str,
+    title: str = "True Colour (B4 / B3 / B2)",
+) -> None:
+    """Plot a true-colour RGB composite from Landsat bands and save as PNG.
+
+    Parameters
+    ----------
+    band4, band3, band2:
+        Red, Green, Blue band DataArrays (raw DN or surface reflectance;
+        values are percentile-stretched to [0, 1] for display).
+    png_path:
+        Destination file path for the PNG output.
+    title:
+        Title shown at the top of the figure.
+    """
+
+    def _stretch(arr: np.ndarray) -> np.ndarray:
+        lo, hi = np.nanpercentile(arr, 2), np.nanpercentile(arr, 98)
+        if hi == lo:
+            return np.zeros_like(arr)
+        return np.clip((arr - lo) / (hi - lo), 0, 1)
+
+    r = _stretch(band4.squeeze().values.astype(float))
+    g = _stretch(band3.squeeze().values.astype(float))
+    b = _stretch(band2.squeeze().values.astype(float))
+    rgb = np.dstack([r, g, b])
+
+    lons = band4.x.values
+    lats = band4.y.values
+    extent = [float(lons.min()), float(lons.max()), float(lats.min()), float(lats.max())]
+    origin = "upper" if lats[0] > lats[-1] else "lower"
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    ax.imshow(rgb, extent=extent, origin=origin, aspect="equal")
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    ax.set_title(title, fontsize=13)
+    fig.tight_layout()
+    fig.savefig(png_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"RGB plot saved to: {png_path}")
+
+
 def plot_lst(
     da: xr.DataArray,
     png_path: str,
@@ -521,6 +568,8 @@ def calculate_LST_from_file(
                 return candidate
         return None
 
+    band2_path = _find_path("B2.TIF")
+    band3_path = _find_path("B3.TIF")
     band4_path = _find_path("B4.TIF")
     band5_path = _find_path("B5.TIF")
     band10_path = _find_path("B10.TIF")
@@ -554,6 +603,8 @@ def calculate_LST_from_file(
     Band5 = rio.open_rasterio(str(band5_path)).rio.reproject("EPSG:4326")
     Band4 = rio.open_rasterio(str(band4_path)).rio.reproject("EPSG:4326")
     Band10 = rio.open_rasterio(str(band10_path)).rio.reproject("EPSG:4326")
+    Band3 = rio.open_rasterio(str(band3_path)).rio.reproject("EPSG:4326") if band3_path else None
+    Band2 = rio.open_rasterio(str(band2_path)).rio.reproject("EPSG:4326") if band2_path else None
 
     BT = calculate_brightness_temperature(Band10, str(mtl_path))
     ndvi = ndvi_calculation(Band5, Band4)
@@ -571,7 +622,11 @@ def calculate_LST_from_file(
     print(f"saving LST data to file: {filename}")
     # da.to_dataset(name="LST").to_netcdf(f"{filename}.nc"))
     da.rio.to_raster(f"{filename}.tif")
-    plot_lst(da, f"{filename}.png", title=scene_name)
+    if Band2 is not None and Band3 is not None:
+        plot_rgb(Band4, Band3, Band2, f"{filename}_RGB.png", title=f"{scene_name} – True Colour")
+    else:
+        print("Skipping RGB plot: B2 and/or B3 not available.")
+    plot_lst(da, f"{filename}_LST.png", title=f"{scene_name} – LST")
 
 
 def main(
@@ -579,7 +634,7 @@ def main(
     download_collection_id: str = "LANDSAT_C2L2",
     download_datetime_range: str = "2026-03-01/2026-04-01",
     download_out_path: str | Path = "./.delta",
-    download_asset_suffixes: list[str] = ["B4.TIF", "B5.TIF", "B10.TIF", "MTL.TXT"],
+    download_asset_suffixes: list[str] = ["B2.TIF", "B3.TIF", "B4.TIF", "B5.TIF", "B10.TIF", "MTL.TXT"],
     download_result_index: int = 0,
     download_limit: int = 10,
     nuts3_code: Optional[str] = "ITI43",
