@@ -115,6 +115,7 @@ def calculate_LST_from_file(
     band4_path = _find_path("B4.TIF")
     band10_path = _find_path("B10.TIF")
     mtl_path = _find_path("MTL.TXT")
+    qa_pixel_path = _find_path("QA_PIXEL.TIF")
 
     missing = []
     if band10_path is None:
@@ -141,8 +142,11 @@ def calculate_LST_from_file(
     Band10 = rio.open_rasterio(str(band10_path)).rio.reproject("EPSG:4326")
     Band3 = rio.open_rasterio(str(band3_path)).rio.reproject("EPSG:4326") if band3_path else None
     Band2 = rio.open_rasterio(str(band2_path)).rio.reproject("EPSG:4326") if band2_path else None
+    QA_Pixel = rio.open_rasterio(str(qa_pixel_path)).rio.reproject("EPSG:4326") if qa_pixel_path else None
+    if QA_Pixel is None:
+        print("QA_PIXEL band not found; cloud masking will be skipped.")
 
-    da = calculate_LST_from_L2_bands(Band10, mtl_path, nuts3_code)
+    da = calculate_LST_from_L2_bands(Band10, mtl_path, nuts3_code, QA_Pixel)
 
     filename = str(output_dir / f"{scene_name}_LST")
     print(f"saving LST data to file: {filename}")
@@ -289,4 +293,4 @@ def main(
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

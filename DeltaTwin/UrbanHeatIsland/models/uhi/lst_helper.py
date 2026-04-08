@@ -36,16 +36,34 @@ def calculate_LST_from_L1_bands(
     return da.rio.write_nodata(np.nan)
 
 
+def mask_clouds(
+    da: xr.DataArray,
+    qa_pixel: xr.DataArray,
+) -> xr.DataArray:
+    """Mask cloudy pixels using the Landsat Collection 2 QA_PIXEL band.
+
+    Pixels flagged as dilated cloud (bit 1), cloud (bit 3), or cloud shadow
+    (bit 4) are set to NaN.
+    """
+    qa = qa_pixel.squeeze().astype(np.uint16)
+    cloud_bits = np.uint16((1 << 1) | (1 << 3) | (1 << 4))  # 0x001A
+    cloudy = (qa & cloud_bits) != 0
+    return da.where(~cloudy)
+
+
 def calculate_LST_from_L2_bands(
         Band10,
         mtl_path,
         nuts3_code,
+        qa_pixel=None,
     ) -> xr.DataArray:
     # For Landsat Collection 2 Level-2, ST_B10 is the NASA-produced LST product
     # (single-channel algorithm with full atmospheric and emissivity correction).
     # We decode it directly to °C; the manual emissivity pipeline is not needed.
     LST = calculate_brightness_temperature_L2(Band10, str(mtl_path))
     LST = LST.rio.write_crs("EPSG:4326")
+    if qa_pixel is not None:
+        LST = mask_clouds(LST, qa_pixel)
     da = mask_nuts3(nuts3_code, LST) if nuts3_code is not None else LST
     da = np.round(da, 1)
     da = da.astype(np.float32)
