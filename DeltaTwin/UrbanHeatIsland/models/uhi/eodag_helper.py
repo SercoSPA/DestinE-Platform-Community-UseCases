@@ -6,7 +6,7 @@ from typing import Optional
 
 from eodag import EODataAccessGateway
 
-from lst_helper import get_nuts3_geom
+from nuts_helper import get_nuts3_geom
 
 
 def search_and_download_eodag(

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Optional
 
 import xarray as xr
-import rioxarray as rio
 import pandas as pd
 import numpy as np
-import geopandas as gpd
+
+from nuts_helper import mask_nuts3
 
 
 def calculate_LST_from_L1_bands(

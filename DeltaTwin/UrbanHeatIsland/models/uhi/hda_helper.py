@@ -12,7 +12,7 @@ from destinepyauth import get_token
 from shapely.wkt import loads as wkt_loads
 from tqdm import tqdm
 
-from lst_helper import get_nuts3_geom
+from nuts_helper import get_nuts3_geom
 
 HDA_STAC_ENDPOINT = "https://hda.data.destination-earth.eu/stac/v2"
 STAC_DT_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
