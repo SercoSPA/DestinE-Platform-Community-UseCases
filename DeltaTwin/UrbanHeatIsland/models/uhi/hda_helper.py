@@ -9,9 +9,7 @@ from typing import Any, Optional
 import requests
 from requests.exceptions import HTTPError
 from destinepyauth import get_token
-from shapely.wkt import loads as wkt_loads
 from tqdm import tqdm
-
 from nuts_helper import get_nuts3_geom
 
 HDA_STAC_ENDPOINT = "https://hda.data.destination-earth.eu/stac/v2"
@@ -43,7 +41,7 @@ def search_products(
     if datetime_range is not None:
         payload["datetime"] = datetime_range
     if nuts3_code is not None:
-        geom = wkt_loads(get_nuts3_geom(nuts3_code))
+        geom = get_nuts3_geom(nuts3_code)
         payload["intersects"] = geom.__geo_interface__
         log.info(f"Filtering by NUTS3 region: {nuts3_code}")
 

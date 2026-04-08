@@ -4,23 +4,15 @@ import os
 from pathlib import Path
 from typing import Optional, Sequence
 
+import geopandas as gpd
 import matplotlib.pyplot as plt
 import xarray as xr
 import rioxarray as rio
 import numpy as np
-import geopandas as gpd
 
-from lst_helper import calculate_LST_from_L2_bands, _NUTS3_GEOJSON_URL
+from lst_helper import calculate_LST_from_L2_bands
 from hda_helper import search_products, download_single_asset
-
-
-def _get_nuts3_gdf(nuts3_code: str):
-    """Return (GeoDataFrame, region_name) for a NUTS3 code, or (None, nuts3_code) on failure."""
-    nuts3 = gpd.read_file(_NUTS3_GEOJSON_URL)
-    region = nuts3[nuts3["NUTS_ID"] == nuts3_code]
-    if region.empty:
-        return None, nuts3_code
-    return region, region["NUTS_NAME"].iloc[0]
+from nuts_helper import find_nuts3_by_name, get_nuts3_geom
 
 
 def _parse_scene_datetime(scene_name: str, mtl_path: Optional[Path] = None) -> str:
@@ -92,18 +84,20 @@ def plot_combined(
     origin_rgb = "upper" if lats_rgb[0] > lats_rgb[-1] else "lower"
 
     # Fetch NUTS3 geometry for outline and zoom extent
-    nuts3_region = None
+    nuts3_geom = None
     region_name = nuts3_code or ""
     zoom_xlim = (extent_rgb[0], extent_rgb[1])
     zoom_ylim = (extent_rgb[2], extent_rgb[3])
     if nuts3_code is not None:
-        nuts3_region, region_name = _get_nuts3_gdf(nuts3_code)
-        if nuts3_region is not None:
-            minx, miny, maxx, maxy = nuts3_region.geometry.union_all().bounds
+        try:
+            nuts3_geom = get_nuts3_geom(nuts3_code)
+            minx, miny, maxx, maxy = nuts3_geom.bounds
             pad_x = (maxx - minx) * 0.05
             pad_y = (maxy - miny) * 0.05
             zoom_xlim = (minx - pad_x, maxx + pad_x)
             zoom_ylim = (miny - pad_y, maxy + pad_y)
+        except ValueError:
+            nuts3_geom = None
 
     lst_data = lst_da.squeeze().values
     lons_lst = lst_da.x.values
@@ -119,8 +113,8 @@ def plot_combined(
     # --- RGB panel ---
     ax_rgb = axes[0]
     ax_rgb.imshow(rgb, extent=extent_rgb, origin=origin_rgb, aspect="auto")
-    if nuts3_region is not None:
-        nuts3_region.plot(
+    if nuts3_geom is not None:
+        gpd.GeoSeries([nuts3_geom], crs="EPSG:4326").plot(
             ax=ax_rgb,
             facecolor=(0.5, 0.5, 0.5, 0.15),
             edgecolor="grey",
@@ -226,15 +220,13 @@ def _parse_cloud_cover_land(mtl_path: Path) -> float:
 
 def main(
     download_collection_id: str = "EO.NASA.DAT.LANDSAT.C2_L2",
-    # download_collection_id: str = "LANDSAT_C2L2",
     download_datetime_range: str = "2026-03-01T00:00:00Z/2026-04-01T00:00:00Z",
     download_out_path: str | Path = "./.delta",
     download_asset_suffixes: list[str] = [
         "B2.TIF", "B3.TIF", "B4.TIF", "B10.TIF", "MTL.TXT", "QA_PIXEL.TIF"
         ],
     download_limit: int = 10,
-    nuts3_code: Optional[str] = "ITI43",
-    # nuts3_code: Optional[str] = None,
+    city_name: Optional[str] = "Bristol",
     cloud_cover_land_threshold: float = 30.0,
 ) -> int:
     """Download Landsat products from HDA and compute LST for each product.
@@ -260,9 +252,10 @@ def main(
         search result (case-insensitive endswith match), e.g. ["B4.TIF", "B7.TIF"].
         ``MTL.TXT`` is always fetched first for the cloud check; other suffixes
         may or may not include it.
-    nuts3_code : str or None
-        Eurostat NUTS3 region code used for masking, e.g. ``"ITI43"`` for
-        the Province of Rome (Metropolitan City of Rome Capital).
+    city_name : str or None
+        Free-text city or region name used to look up the Eurostat NUTS3 region
+        for spatial masking, e.g. ``"Rome"`` or ``"Rotterdam"``.
+        The best-matching region is resolved via :func:`nuts_helper.find_nuts3_by_name`.
         Pass ``None`` to skip masking and return LST for the full scene.
     cloud_cover_land_threshold : float
         Maximum acceptable ``CLOUD_COVER_LAND`` percentage (0–100).
@@ -273,6 +266,8 @@ def main(
     int
         Zero when processing completes.
     """
+
+    nuts3_code = find_nuts3_by_name(city_name) if city_name is not None else None
 
     if not download_asset_suffixes:
         raise ValueError("download_asset_suffixes must contain at least one suffix.")
