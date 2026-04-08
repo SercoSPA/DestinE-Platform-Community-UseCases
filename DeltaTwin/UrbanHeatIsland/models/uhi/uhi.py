@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -65,7 +66,10 @@ def plot_combined(
     """
 
     def _stretch(arr: np.ndarray) -> np.ndarray:
-        lo, hi = np.nanpercentile(arr, 2), np.nanpercentile(arr, 98)
+        valid = arr[(arr > 0) & np.isfinite(arr)]
+        if valid.size == 0:
+            return np.zeros_like(arr)
+        lo, hi = np.percentile(valid, 2), np.percentile(valid, 98)
         if hi == lo:
             return np.zeros_like(arr)
         return np.clip((arr - lo) / (hi - lo), 0, 1)
@@ -110,13 +114,23 @@ def plot_combined(
     fig, axes = plt.subplots(1, 2, figsize=(10, 4), constrained_layout=True)
     fig.suptitle(title, fontsize=14, fontweight="bold")
 
+    # --- LST panel ---
+    ax_lst = axes[0]
+    img = ax_lst.pcolormesh(lons_lst, lats_lst, lst_data, cmap="hot_r", vmin=0, vmax=40)
+    fig.colorbar(img, ax=ax_lst, fraction=0.046, pad=0.04, label="LST (°C)")
+    ax_lst.set_xlim(*zoom_xlim)
+    ax_lst.set_ylim(*zoom_ylim)
+    ax_lst.set_xlabel("Longitude")
+    ax_lst.set_ylabel("Latitude")
+    ax_lst.set_title("LST")
+
     # --- RGB panel ---
-    ax_rgb = axes[0]
+    ax_rgb = axes[1]
     ax_rgb.imshow(rgb, extent=extent_rgb, origin=origin_rgb, aspect="auto")
     if nuts3_geom is not None:
         gpd.GeoSeries([nuts3_geom], crs="EPSG:4326").plot(
             ax=ax_rgb,
-            facecolor=(0.5, 0.5, 0.5, 0.15),
+            facecolor="none",
             edgecolor="grey",
             linewidth=1.5,
             aspect=None,
@@ -125,17 +139,7 @@ def plot_combined(
     ax_rgb.set_ylim(*zoom_ylim)
     ax_rgb.set_xlabel("Longitude")
     ax_rgb.set_ylabel("Latitude")
-    ax_rgb.set_title("RGB")
-
-    # --- LST panel ---
-    ax_lst = axes[1]
-    img = ax_lst.pcolormesh(lons_lst, lats_lst, lst_data, cmap="hot_r", vmin=0, vmax=40)
-    fig.colorbar(img, ax=ax_lst, fraction=0.046, pad=0.04, label="LST (°C)")
-    ax_lst.set_xlim(*zoom_xlim)
-    ax_lst.set_ylim(*zoom_ylim)
-    ax_lst.set_xlabel("Longitude")
-    ax_lst.set_ylabel("Latitude")
-    ax_lst.set_title("LST")
+    ax_rgb.set_title("Reference RGB image")
 
     fig.savefig(png_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
@@ -220,14 +224,15 @@ def _parse_cloud_cover_land(mtl_path: Path) -> float:
 
 def main(
     download_collection_id: str = "EO.NASA.DAT.LANDSAT.C2_L2",
-    download_datetime_range: str = "2026-03-01T00:00:00Z/2026-04-01T00:00:00Z",
+    download_date: str | None = None,
+    download_lookback_days: int = 30,
     download_out_path: str | Path = "./.delta",
     download_asset_suffixes: list[str] = [
         "B2.TIF", "B3.TIF", "B4.TIF", "B10.TIF", "MTL.TXT", "QA_PIXEL.TIF"
         ],
     download_limit: int = 10,
     city_name: Optional[str] = "Bristol",
-    cloud_cover_land_threshold: float = 30.0,
+    cloud_cover_land_threshold: float = 50.0,
 ) -> int:
     """Download Landsat products from HDA and compute LST for each product.
 
@@ -241,8 +246,11 @@ def main(
     ----------
     download_collection_id : str
         STAC collection identifier used to search products.
-    download_datetime_range : str
-        STAC datetime interval in the format start/end (UTC ISO-8601).
+    download_date : str or None
+        End date for the search window in ``YYYY-MM-DD`` format (UTC).
+        Defaults to today when ``None``.
+    download_lookback_days : int
+        Number of days before *download_date* to search for images.
     download_out_path : str | Path
         Destination directory where files are written.
     download_limit : int
@@ -266,6 +274,17 @@ def main(
     int
         Zero when processing completes.
     """
+
+    end_dt = (
+        datetime.strptime(download_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        if download_date is not None
+        else datetime.now(tz=timezone.utc)
+    )
+    start_dt = end_dt - timedelta(days=download_lookback_days)
+    download_datetime_range = (
+        f"{start_dt.strftime('%Y-%m-%dT%H:%M:%SZ')}/{end_dt.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+    )
+    print(f"Searching for images between {start_dt.date()} and {end_dt.date()}")
 
     nuts3_code = find_nuts3_by_name(city_name) if city_name is not None else None
 
@@ -339,8 +358,6 @@ def main(
         )
     except Exception as e:
         print(f"Exception calculating LST from downloaded files: \n{e}")
-
-    return 0
 
 
 if __name__ == "__main__":
