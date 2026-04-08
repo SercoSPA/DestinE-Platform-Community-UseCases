@@ -9,100 +9,8 @@ import xarray as xr
 import rioxarray as rio
 import numpy as np
 
-from eodag import EODataAccessGateway
-
 from lst_helper import calculate_LST_from_bands, get_nuts3_geom
-
-
-def search_and_download(
-    collection_id: str,
-    datetime_range: str,
-    out_path: Path,
-    asset_suffixes: list[str],
-    result_index: int = 0,
-    limit: int = 20,
-    nuts3_code: Optional[str] = None,
-) -> list[Path]:
-    """Search and download a Landsat product via EODAG/DEDL.
-
-    Credentials are read from the ``DESP_USERNAME`` and ``DESP_PASSWORD``
-    environment variables (same as the DestinE Platform notebook pattern).
-
-    Parameters
-    ----------
-    collection_id:
-        STAC ``productType`` identifier, e.g. ``"EO.NASA.DAT.LANDSAT.C2_L2"``.
-    datetime_range:
-        ISO-8601 interval ``"start/end"``, e.g.
-        ``"2025-07-01T00:00:00Z/2025-07-31T23:59:59Z"``.
-    out_path:
-        Destination directory for the downloaded product.
-    asset_suffixes:
-        File-name suffixes to locate in the downloaded product (case-insensitive),
-        e.g. ``["B4.TIF", "B5.TIF", "B10.TIF", "MTL.TXT"]``.
-    result_index:
-        Index of the search result to download.
-    limit:
-        Maximum number of results to request from the STAC search.
-    nuts3_code:
-        Optional Eurostat NUTS3 region code (e.g. ``"ITI43"`` for the Province
-        of Rome).  When provided, the region's geometry is used as a spatial
-        filter so that only products intersecting the region are returned.
-
-    Returns
-    -------
-    list[Path]
-        One :class:`~pathlib.Path` per entry in *asset_suffixes* (only those found).
-    """
-    username = os.environ.get("DESPAUTH_USER", "")
-    password = os.environ.get("DESPAUTH_PASSWORD", "")
-    if username:
-        os.environ["EODAG__DEDL__AUTH__CREDENTIALS__USERNAME"] = username
-    if password:
-        os.environ["EODAG__DEDL__AUTH__CREDENTIALS__PASSWORD"] = password
-    os.environ["EODAG__DEDL__PRIORITY"] = "10"
-    os.environ["EODAG__DEDL__SEARCH__TIMEOUT"] = "60"
-
-    dag = EODataAccessGateway()
-
-    start, end = datetime_range.split("/", 1)
-
-    search_kwargs: dict = {}
-    if nuts3_code is not None:
-        search_kwargs["geom"] = get_nuts3_geom(nuts3_code)
-
-    results = dag.search(
-        provider="dedl",
-        collection=collection_id,
-        start=start,
-        end=end,
-        limit=limit,
-        **search_kwargs,
-    )
-    if not results:
-        raise ValueError("No products found for the given criteria.")
-    if result_index >= len(results):
-        raise IndexError(
-            f"result_index={result_index} out of range for {len(results)} result(s)."
-        )
-
-    product = results[result_index]
-    print(f"Selected product: {product.properties.get('id', product)}")
-
-    downloaded = Path(dag.download(product, output_dir=str(out_path)))
-    all_files = list(downloaded.rglob("*")) if downloaded.is_dir() else [downloaded]
-
-    found: list[Path] = []
-    for suffix in asset_suffixes:
-        match = next(
-            (f for f in all_files if f.is_file() and f.name.upper().endswith(suffix.upper())),
-            None,
-        )
-        if match is not None:
-            found.append(match)
-        else:
-            print(f"Warning: no downloaded file found with suffix '{suffix}' in {downloaded}")
-    return found
+from hda_helper import search_and_download
 
 
 def plot_rgb(
@@ -254,9 +162,9 @@ def calculate_LST_from_file(
 
 
 def main(
-    # download_collection_id: str = "EO.NASA.DAT.LANDSAT.C2_L2",
-    download_collection_id: str = "LANDSAT_C2L2",
-    download_datetime_range: str = "2026-03-01/2026-04-01",
+    download_collection_id: str = "EO.NASA.DAT.LANDSAT.C2_L2",
+    # download_collection_id: str = "LANDSAT_C2L2",
+    download_datetime_range: str = "2026-03-01T00:00:00Z/2026-04-01T00:00:00Z",
     download_out_path: str | Path = "./.delta",
     download_asset_suffixes: list[str] = ["B2.TIF", "B3.TIF", "B4.TIF", "B5.TIF", "B10.TIF", "MTL.TXT"],
     download_result_index: int = 0,
@@ -312,6 +220,7 @@ def main(
         print(f"All {len(existing_paths)} required files already exist, skipping download.")
         downloaded_paths = existing_paths
     else:
+        # HDA / custom code
         downloaded_paths = search_and_download(
             collection_id=download_collection_id,
             datetime_range=download_datetime_range,
@@ -319,7 +228,7 @@ def main(
             asset_suffixes=download_asset_suffixes,
             result_index=download_result_index,
             limit=download_limit,
-            nuts3_code=nuts3_code,
+            # nuts3_code=nuts3_code,
         )
 
     try:
