@@ -227,49 +227,12 @@ def _download_asset(
     raise RuntimeError("Download failed unexpectedly")
 
 
-def search_and_download(
-    collection_id: str,
-    datetime_range: str,
+def download_single_asset(
+    product: dict[str, Any],
+    asset_suffix: str,
     out_path: Path,
-    asset_suffixes: list[str],
-    result_index: int = 0,
-    limit: int = 1,
-    endpoint: str = HDA_STAC_ENDPOINT,
-    nuts3_code: Optional[str] = None,
-) -> list[Path]:
-    """Search products, pick one result by index, and download one asset per suffix.
-
-    Asset selection is based on case-insensitive endswith suffix matching.
-    """
-    if not asset_suffixes:
-        raise ValueError("asset_suffixes must contain at least one suffix")
-
-    features = search_products(
-        collection_id=collection_id,
-        datetime_range=datetime_range,
-        limit=limit,
-        endpoint=endpoint,
-        nuts3_code=nuts3_code,
-    )
-    if not features:
-        raise ValueError("No products found for the given criteria")
-    if result_index < 0 or result_index >= len(features):
-        raise IndexError(f"result_index={result_index} out of range for {len(features)} results")
-
-    selected = features[result_index]
-    log.info(f"Selected result index {result_index}: {selected.get('id')}")
-    log.info(f"Available assets: {list_asset_keys(selected)}")
-
-    downloaded_paths: list[Path] = []
-    for suffix in asset_suffixes:
-        selected_asset_key = resolve_asset_key_by_suffix(selected, suffix)
-        log.info(f"Suffix '{suffix}' -> asset key: {selected_asset_key}")
-        downloaded_paths.append(
-            _download_asset(
-                product=selected,
-                asset_key=selected_asset_key,
-                out_path=out_path,
-            )
-        )
-
-    return downloaded_paths
+) -> Path:
+    """Download a single asset from a product feature by suffix match."""
+    asset_key = resolve_asset_key_by_suffix(product, asset_suffix)
+    log.info(f"Suffix '{asset_suffix}' -> asset key: {asset_key}")
+    return _download_asset(product=product, asset_key=asset_key, out_path=out_path)

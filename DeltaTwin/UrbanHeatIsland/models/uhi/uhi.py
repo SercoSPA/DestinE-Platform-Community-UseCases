@@ -10,7 +10,7 @@ import rioxarray as rio
 import numpy as np
 
 from lst_helper import calculate_LST_from_bands
-from hda_helper import search_and_download
+from hda_helper import search_products, download_single_asset
 
 
 def plot_rgb(
@@ -161,18 +161,33 @@ def calculate_LST_from_file(
     plot_lst(da, f"{filename}_LST.png", title=f"{scene_name} – LST")
 
 
+def _parse_cloud_cover_land(mtl_path: Path) -> float:
+    """Return the CLOUD_COVER_LAND value from a Landsat MTL metadata file."""
+    with open(mtl_path) as f:
+        for line in f:
+            if "CLOUD_COVER_LAND" in line:
+                return float(line.split("=")[1].strip())
+    raise ValueError(f"CLOUD_COVER_LAND not found in {mtl_path}")
+
+
 def main(
     download_collection_id: str = "EO.NASA.DAT.LANDSAT.C2_L2",
     # download_collection_id: str = "LANDSAT_C2L2",
     download_datetime_range: str = "2026-03-01T00:00:00Z/2026-04-01T00:00:00Z",
     download_out_path: str | Path = "./.delta",
-    download_asset_suffixes: list[str] = ["B2.TIF", "B3.TIF", "B4.TIF", "B5.TIF", "B10.TIF", "MTL.TXT"],
-    download_result_index: int = 0,
+    download_asset_suffixes: list[str] = ["B2.TIF", "B3.TIF", "B4.TIF", "B5.TIF", "B10.TIF", "MTL.TXT", "QA_PIXEL.TIF"],
     download_limit: int = 10,
     nuts3_code: Optional[str] = "ITI43",
     # nuts3_code: Optional[str] = None,
+    cloud_cover_land_threshold: float = 30.0,
 ) -> int:
     """Download Landsat products from HDA and compute LST for each product.
+
+    Products are iterated in search-result order. For each, only the MTL file
+    is downloaded first; if ``CLOUD_COVER_LAND`` exceeds
+    ``cloud_cover_land_threshold`` the product is skipped and the MTL file is
+    removed. The remaining assets are only downloaded for the first product
+    that passes the cloud check.
 
     Parameters
     ----------
@@ -181,18 +196,21 @@ def main(
     download_datetime_range : str
         STAC datetime interval in the format start/end (UTC ISO-8601).
     download_out_path : str | Path
-        Destination directory where ZIP files and extracted folders are written.
+        Destination directory where files are written.
     download_limit : int
         Maximum number of products requested from the STAC search endpoint.
     download_asset_suffixes : list[str]
-        Suffixes used to select one asset key per suffix from the selected
+        Suffixes used to select one asset key per suffix from the accepted
         search result (case-insensitive endswith match), e.g. ["B4.TIF", "B7.TIF"].
-    download_result_index : int
-        Index of the search result from which the asset is downloaded.
+        ``MTL.TXT`` is always fetched first for the cloud check; other suffixes
+        may or may not include it.
     nuts3_code : str or None
         Eurostat NUTS3 region code used for masking, e.g. ``"ITI43"`` for
         the Province of Rome (Metropolitan City of Rome Capital).
         Pass ``None`` to skip masking and return LST for the full scene.
+    cloud_cover_land_threshold : float
+        Maximum acceptable ``CLOUD_COVER_LAND`` percentage (0–100).
+        Products above this value are skipped.
 
     Returns
     -------
@@ -220,16 +238,49 @@ def main(
         print(f"All {len(existing_paths)} required files already exist, skipping download.")
         downloaded_paths = existing_paths
     else:
-        # HDA / custom code
-        downloaded_paths = search_and_download(
+        features = search_products(
             collection_id=download_collection_id,
             datetime_range=download_datetime_range,
-            out_path=Path(download_out_path),
-            asset_suffixes=download_asset_suffixes,
-            result_index=download_result_index,
             limit=download_limit,
             nuts3_code=nuts3_code,
         )
+        if not features:
+            raise ValueError("No products found for the given criteria")
+
+        downloaded_paths = None
+        for product in features:
+            product_id = product.get("id", "unknown")
+
+            # Download MTL first to check cloud cover before fetching large assets
+            mtl_path = download_single_asset(product, "MTL.TXT", out_path)
+            cloud_cover = _parse_cloud_cover_land(mtl_path)
+            if cloud_cover > cloud_cover_land_threshold:
+                print(
+                    f"Skipping product '{product_id}': "
+                    f"CLOUD_COVER_LAND={cloud_cover:.1f}% > {cloud_cover_land_threshold}%"
+                )
+                mtl_path.unlink(missing_ok=True)
+                continue
+
+            print(
+                f"Product '{product_id}' accepted: CLOUD_COVER_LAND={cloud_cover:.1f}%"
+            )
+
+            # Download the remaining assets (skip MTL.TXT — already downloaded)
+            paths: list[Path] = [mtl_path]
+            for suffix in download_asset_suffixes:
+                if suffix.upper() == "MTL.TXT":
+                    continue
+                paths.append(download_single_asset(product, suffix, out_path))
+            downloaded_paths = paths
+            break
+
+        if downloaded_paths is None:
+            raise ValueError(
+                f"No product found with CLOUD_COVER_LAND <= {cloud_cover_land_threshold}% "
+                f"among {len(features)} search result(s)."
+            )
+        exit()
 
     try:
         calculate_LST_from_file(
