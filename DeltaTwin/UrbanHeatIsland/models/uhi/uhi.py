@@ -8,29 +8,68 @@ import matplotlib.pyplot as plt
 import xarray as xr
 import rioxarray as rio
 import numpy as np
+import geopandas as gpd
 
-from lst_helper import calculate_LST_from_L2_bands
+from lst_helper import calculate_LST_from_L2_bands, _NUTS3_GEOJSON_URL
 from hda_helper import search_products, download_single_asset
 
 
-def plot_rgb(
+def _get_nuts3_gdf(nuts3_code: str):
+    """Return (GeoDataFrame, region_name) for a NUTS3 code, or (None, nuts3_code) on failure."""
+    nuts3 = gpd.read_file(_NUTS3_GEOJSON_URL)
+    region = nuts3[nuts3["NUTS_ID"] == nuts3_code]
+    if region.empty:
+        return None, nuts3_code
+    return region, region["NUTS_NAME"].iloc[0]
+
+
+def _parse_scene_datetime(scene_name: str, mtl_path: Optional[Path] = None) -> str:
+    """Return a human-readable acquisition datetime from the MTL file or scene name."""
+    if mtl_path is not None:
+        date_val = time_val = None
+        try:
+            with open(mtl_path) as f:
+                for line in f:
+                    stripped = line.strip()
+                    if stripped.startswith("DATE_ACQUIRED") and "=" in stripped:
+                        date_val = stripped.split("=", 1)[1].strip().strip('"')
+                    elif stripped.startswith("SCENE_CENTER_TIME") and "=" in stripped:
+                        time_val = stripped.split("=", 1)[1].strip().strip('"').split(".")[0]
+        except OSError:
+            pass
+        if date_val:
+            return f"{date_val} {time_val}" if time_val else date_val
+    for part in scene_name.split("_"):
+        if len(part) == 8 and part.isdigit():
+            return f"{part[:4]}-{part[4:6]}-{part[6:]}"
+    return scene_name
+
+
+def plot_combined(
     band4: xr.DataArray,
     band3: xr.DataArray,
     band2: xr.DataArray,
+    lst_da: xr.DataArray,
     png_path: str,
-    title: str = "True Colour (B4 / B3 / B2)",
+    nuts3_code: Optional[str] = None,
+    scene_datetime: str = "",
 ) -> None:
-    """Plot a true-colour RGB composite from Landsat bands and save as PNG.
+    """Plot RGB and LST side-by-side and save as a single PNG.
 
     Parameters
     ----------
     band4, band3, band2:
         Red, Green, Blue band DataArrays (raw DN or surface reflectance;
         values are percentile-stretched to [0, 1] for display).
+    lst_da:
+        LST DataArray in degrees Celsius (EPSG:4326).
     png_path:
         Destination file path for the PNG output.
-    title:
-        Title shown at the top of the figure.
+    nuts3_code:
+        Eurostat NUTS3 region code used to zoom both panels and draw the
+        outline polygon on the RGB panel.
+    scene_datetime:
+        Human-readable acquisition datetime shown in the figure title.
     """
 
     def _stretch(arr: np.ndarray) -> np.ndarray:
@@ -44,57 +83,70 @@ def plot_rgb(
     b = _stretch(band2.squeeze().values.astype(float))
     rgb = np.dstack([r, g, b])
 
-    lons = band4.x.values
-    lats = band4.y.values
-    extent = [float(lons.min()), float(lons.max()), float(lats.min()), float(lats.max())]
-    origin = "upper" if lats[0] > lats[-1] else "lower"
+    lons_rgb = band4.x.values
+    lats_rgb = band4.y.values
+    extent_rgb = [
+        float(lons_rgb.min()), float(lons_rgb.max()),
+        float(lats_rgb.min()), float(lats_rgb.max()),
+    ]
+    origin_rgb = "upper" if lats_rgb[0] > lats_rgb[-1] else "lower"
 
-    fig, ax = plt.subplots(figsize=(10, 8))
-    ax.imshow(rgb, extent=extent, origin=origin, aspect="equal")
-    ax.set_xlabel("Longitude")
-    ax.set_ylabel("Latitude")
-    ax.set_title(title, fontsize=13)
-    fig.tight_layout()
+    # Fetch NUTS3 geometry for outline and zoom extent
+    nuts3_region = None
+    region_name = nuts3_code or ""
+    zoom_xlim = (extent_rgb[0], extent_rgb[1])
+    zoom_ylim = (extent_rgb[2], extent_rgb[3])
+    if nuts3_code is not None:
+        nuts3_region, region_name = _get_nuts3_gdf(nuts3_code)
+        if nuts3_region is not None:
+            minx, miny, maxx, maxy = nuts3_region.geometry.union_all().bounds
+            pad_x = (maxx - minx) * 0.1
+            pad_y = (maxy - miny) * 0.1
+            zoom_xlim = (minx - pad_x, maxx + pad_x)
+            zoom_ylim = (miny - pad_y, maxy + pad_y)
+
+    lst_data = lst_da.squeeze().values
+    lons_lst = lst_da.x.values
+    lats_lst = lst_da.y.values
+
+    title = f"LST from Landsat over {region_name}"
+    if scene_datetime:
+        title += f" at {scene_datetime}"
+
+    fig, axes = plt.subplots(1, 2, figsize=(18, 8), constrained_layout=True)
+    fig.suptitle(title, fontsize=14, fontweight="bold")
+
+    # --- RGB panel ---
+    ax_rgb = axes[0]
+    ax_rgb.imshow(rgb, extent=extent_rgb, origin=origin_rgb, aspect="auto")
+    if nuts3_region is not None:
+        nuts3_region.plot(
+            ax=ax_rgb,
+            facecolor=(0.5, 0.5, 0.5, 0.15),
+            edgecolor="grey",
+            linewidth=1.5,
+        )
+    ax_rgb.set_xlim(*zoom_xlim)
+    ax_rgb.set_ylim(*zoom_ylim)
+    ax_rgb.set_xlabel("Longitude")
+    ax_rgb.set_ylabel("Latitude")
+    ax_rgb.set_title("RGB image")
+    ax_rgb.set_aspect("equal", adjustable="box")
+
+    # --- LST panel ---
+    ax_lst = axes[1]
+    img = ax_lst.pcolormesh(lons_lst, lats_lst, lst_data, cmap="hot_r", vmin=0, vmax=40)
+    fig.colorbar(img, ax=ax_lst, fraction=0.046, pad=0.04, label="LST (°C)")
+    ax_lst.set_xlim(*zoom_xlim)
+    ax_lst.set_ylim(*zoom_ylim)
+    ax_lst.set_xlabel("Longitude")
+    ax_lst.set_ylabel("Latitude")
+    ax_lst.set_title("LST")
+    ax_lst.set_aspect("equal", adjustable="box")
+
     fig.savefig(png_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
-    print(f"RGB plot saved to: {png_path}")
-
-
-def plot_lst(
-    da: xr.DataArray,
-    png_path: str,
-    title: str = "Land Surface Temperature",
-) -> None:
-    """Plot a LST DataArray and save it as a PNG file.
-
-    Parameters
-    ----------
-    da:
-        LST DataArray in degrees Celsius (2-D, EPSG:4326).
-    png_path:
-        Destination file path for the PNG output.
-    title:
-        Title shown at the top of the figure.
-    """
-    data = da.squeeze().values
-    lons = da.x.values
-    lats = da.y.values
-
-    vmin = float(np.nanpercentile(data, 2))
-    vmax = float(np.nanpercentile(data, 98))
-
-    fig, ax = plt.subplots(figsize=(10, 8))
-    img = ax.pcolormesh(lons, lats, data, cmap="RdYlBu_r", vmin=vmin, vmax=vmax)
-    cbar = fig.colorbar(img, ax=ax, fraction=0.046, pad=0.04)
-    cbar.set_label("LST (°C)", fontsize=11)
-    ax.set_xlabel("Longitude")
-    ax.set_ylabel("Latitude")
-    ax.set_title(title, fontsize=13)
-    ax.set_aspect("equal")
-    fig.tight_layout()
-    fig.savefig(png_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(f"LST plot saved to: {png_path}")
+    print(f"Combined plot saved to: {png_path}")
 
 
 def calculate_LST_from_file(
@@ -148,15 +200,20 @@ def calculate_LST_from_file(
 
     da = calculate_LST_from_L2_bands(Band10, mtl_path, nuts3_code, QA_Pixel)
 
+    scene_datetime = _parse_scene_datetime(scene_name, mtl_path)
     filename = str(output_dir / f"{scene_name}_LST")
     print(f"saving LST data to file: {filename}")
     # da.to_dataset(name="LST").to_netcdf(f"{filename}.nc"))
     da.rio.to_raster(f"{filename}.tif")
     if Band2 is not None and Band3 is not None:
-        plot_rgb(Band4, Band3, Band2, f"{filename}_RGB.png", title=f"{scene_name} – True Colour")
+        plot_combined(
+            Band4, Band3, Band2, da,
+            f"{filename}_plot.png",
+            nuts3_code=nuts3_code,
+            scene_datetime=scene_datetime,
+        )
     else:
-        print("Skipping RGB plot: B2 and/or B3 not available.")
-    plot_lst(da, f"{filename}_LST.png", title=f"{scene_name} – LST")
+        print("Skipping combined plot: B2 and/or B3 not available.")
 
 
 def _parse_cloud_cover_land(mtl_path: Path) -> float:
