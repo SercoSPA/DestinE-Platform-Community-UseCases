@@ -15,7 +15,7 @@ _NUTS3_GEOJSON_URL = (
 )
 
 
-def calculate_LST_from_bands(
+def calculate_LST_from_L1_bands(
         Band4,
         Band5,
         Band10,
@@ -23,12 +23,28 @@ def calculate_LST_from_bands(
         nuts3_code,
     ) -> xr.DataArray:
 
-    BT = calculate_brightness_temperature(Band10, str(mtl_path))
+    BT = calculate_brightness_temperature_L1(Band10, str(mtl_path))
     ndvi = ndvi_calculation(Band5, Band4)
     Pv = proportion_vegetation(ndvi.squeeze())
 
     emissivity = calculate_land_emissivity(ndvi.squeeze(), Pv)
     LST = calculate_LST(BT, emissivity)
+    LST = LST.rio.write_crs("EPSG:4326")
+    da = mask_nuts3(nuts3_code, LST) if nuts3_code is not None else LST
+    da = np.round(da, 1)
+    da = da.astype(np.float32)
+    return da.rio.write_nodata(np.nan)
+
+
+def calculate_LST_from_L2_bands(
+        Band10,
+        mtl_path,
+        nuts3_code,
+    ) -> xr.DataArray:
+    # For Landsat Collection 2 Level-2, ST_B10 is the NASA-produced LST product
+    # (single-channel algorithm with full atmospheric and emissivity correction).
+    # We decode it directly to °C; the manual emissivity pipeline is not needed.
+    LST = calculate_brightness_temperature_L2(Band10, str(mtl_path))
     LST = LST.rio.write_crs("EPSG:4326")
     da = mask_nuts3(nuts3_code, LST) if nuts3_code is not None else LST
     da = np.round(da, 1)
@@ -155,7 +171,7 @@ def calculate_land_emissivity(NDVI: xr.DataArray, Pv: xr.DataArray) -> xr.DataAr
     
     return emissivity
 
-def calculate_brightness_temperature(Band10: xr.DataArray, filepath: str) -> xr.DataArray:
+def calculate_brightness_temperature_L1(Band10: xr.DataArray, filepath: str) -> xr.DataArray:
     '''
     Band10 : Digital Number from Landsat TIRS instrument Band 10
     filepath : file of metadata file
@@ -171,6 +187,7 @@ def calculate_brightness_temperature(Band10: xr.DataArray, filepath: str) -> xr.
     BT = K2 /  np.log  ( K1 / TOA_10  + 1) - 273.15
     return BT
 
+
 def calculate_LST(BT: xr.DataArray, emissivity: xr.DataArray) -> xr.DataArray:
     """
     Calculate Land Surface Temperature.
@@ -181,3 +198,20 @@ def calculate_LST(BT: xr.DataArray, emissivity: xr.DataArray) -> xr.DataArray:
 
     Ts = BT / (1 + par * np.log(emissivity))
     return Ts
+
+
+def calculate_brightness_temperature_L2(Band10: xr.DataArray, filepath: str) -> xr.DataArray:
+    '''
+    Band10 : Scaled DN from Landsat Collection 2 Level-2 ST_B10 product.
+    filepath : path to the MTL metadata file.
+
+    For Collection 2 Level-2 the ST_B10 band stores surface temperature
+    as scaled integers; the correct conversion is:
+        T(K) = DN * TEMPERATURE_MULT_BAND_ST_B10 + TEMPERATURE_ADD_BAND_ST_B10
+    (standard Landsat C2L2 values: mult=0.00341802, add=149.0)
+    '''
+    T_mult = extract_parameter_value(filepath, "TEMPERATURE_MULT_BAND_ST_B10")
+    T_add  = extract_parameter_value(filepath, "TEMPERATURE_ADD_BAND_ST_B10")
+    BT = Band10 * T_mult + T_add - 273.15
+    BT = xr.where(Band10 == 0, np.nan, BT)  # mask fill pixels
+    return BT

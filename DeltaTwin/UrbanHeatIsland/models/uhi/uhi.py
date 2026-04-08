@@ -9,7 +9,7 @@ import xarray as xr
 import rioxarray as rio
 import numpy as np
 
-from lst_helper import calculate_LST_from_bands
+from lst_helper import calculate_LST_from_L2_bands
 from hda_helper import search_products, download_single_asset
 
 
@@ -113,15 +113,10 @@ def calculate_LST_from_file(
     band2_path = _find_path("B2.TIF")
     band3_path = _find_path("B3.TIF")
     band4_path = _find_path("B4.TIF")
-    band5_path = _find_path("B5.TIF")
     band10_path = _find_path("B10.TIF")
     mtl_path = _find_path("MTL.TXT")
 
     missing = []
-    if band4_path is None:
-        missing.append("B4")
-    if band5_path is None:
-        missing.append("B5")
     if band10_path is None:
         missing.append("B10")
     if mtl_path is None:
@@ -139,16 +134,15 @@ def calculate_LST_from_file(
             scene_name = scene_name[: -len(token)]
             break
 
-    print(f"Using inputs: {band4_path.name}, {band5_path.name}, {band10_path.name}, {mtl_path.name}")
+    print(f"Using inputs: {band10_path.name}, {mtl_path.name}")
     output_dir = band4_path.parent
 
-    Band5 = rio.open_rasterio(str(band5_path)).rio.reproject("EPSG:4326")
     Band4 = rio.open_rasterio(str(band4_path)).rio.reproject("EPSG:4326")
     Band10 = rio.open_rasterio(str(band10_path)).rio.reproject("EPSG:4326")
     Band3 = rio.open_rasterio(str(band3_path)).rio.reproject("EPSG:4326") if band3_path else None
     Band2 = rio.open_rasterio(str(band2_path)).rio.reproject("EPSG:4326") if band2_path else None
 
-    da = calculate_LST_from_bands(Band4, Band5, Band10, mtl_path, nuts3_code)
+    da = calculate_LST_from_L2_bands(Band10, mtl_path, nuts3_code)
 
     filename = str(output_dir / f"{scene_name}_LST")
     print(f"saving LST data to file: {filename}")
@@ -175,7 +169,9 @@ def main(
     # download_collection_id: str = "LANDSAT_C2L2",
     download_datetime_range: str = "2026-03-01T00:00:00Z/2026-04-01T00:00:00Z",
     download_out_path: str | Path = "./.delta",
-    download_asset_suffixes: list[str] = ["B2.TIF", "B3.TIF", "B4.TIF", "B5.TIF", "B10.TIF", "MTL.TXT", "QA_PIXEL.TIF"],
+    download_asset_suffixes: list[str] = [
+        "B2.TIF", "B3.TIF", "B4.TIF", "B10.TIF", "MTL.TXT", "QA_PIXEL.TIF"
+        ],
     download_limit: int = 10,
     nuts3_code: Optional[str] = "ITI43",
     # nuts3_code: Optional[str] = None,
@@ -280,7 +276,6 @@ def main(
                 f"No product found with CLOUD_COVER_LAND <= {cloud_cover_land_threshold}% "
                 f"among {len(features)} search result(s)."
             )
-        exit()
 
     try:
         calculate_LST_from_file(
