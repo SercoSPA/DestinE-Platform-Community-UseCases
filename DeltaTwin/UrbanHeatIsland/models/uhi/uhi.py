@@ -100,8 +100,8 @@ def plot_combined(
         nuts3_region, region_name = _get_nuts3_gdf(nuts3_code)
         if nuts3_region is not None:
             minx, miny, maxx, maxy = nuts3_region.geometry.union_all().bounds
-            pad_x = (maxx - minx) * 0.1
-            pad_y = (maxy - miny) * 0.1
+            pad_x = (maxx - minx) * 0.05
+            pad_y = (maxy - miny) * 0.05
             zoom_xlim = (minx - pad_x, maxx + pad_x)
             zoom_ylim = (miny - pad_y, maxy + pad_y)
 
@@ -109,11 +109,11 @@ def plot_combined(
     lons_lst = lst_da.x.values
     lats_lst = lst_da.y.values
 
-    title = f"LST from Landsat over {region_name}"
+    title = f"Land Surface Temperature (LST) from Landsat over {region_name}"
     if scene_datetime:
         title += f" at {scene_datetime}"
 
-    fig, axes = plt.subplots(1, 2, figsize=(18, 8), constrained_layout=True)
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4), constrained_layout=True)
     fig.suptitle(title, fontsize=14, fontweight="bold")
 
     # --- RGB panel ---
@@ -125,13 +125,13 @@ def plot_combined(
             facecolor=(0.5, 0.5, 0.5, 0.15),
             edgecolor="grey",
             linewidth=1.5,
+            aspect=None,
         )
     ax_rgb.set_xlim(*zoom_xlim)
     ax_rgb.set_ylim(*zoom_ylim)
     ax_rgb.set_xlabel("Longitude")
     ax_rgb.set_ylabel("Latitude")
-    ax_rgb.set_title("RGB image")
-    ax_rgb.set_aspect("equal", adjustable="box")
+    ax_rgb.set_title("RGB")
 
     # --- LST panel ---
     ax_lst = axes[1]
@@ -142,7 +142,6 @@ def plot_combined(
     ax_lst.set_xlabel("Longitude")
     ax_lst.set_ylabel("Latitude")
     ax_lst.set_title("LST")
-    ax_lst.set_aspect("equal", adjustable="box")
 
     fig.savefig(png_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
