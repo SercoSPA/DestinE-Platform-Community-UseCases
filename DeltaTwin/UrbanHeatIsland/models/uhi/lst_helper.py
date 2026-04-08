@@ -1,22 +1,13 @@
 from __future__ import annotations
 
-import datetime as dt
-import os
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Optional
 
-import matplotlib.pyplot as plt
 import xarray as xr
 import rioxarray as rio
 import pandas as pd
 import numpy as np
 import geopandas as gpd
-from geopandas import BaseGeometry
-from regionmask import mask_geopandas
-import json
-import rasterio
-import warnings
-from shapely.geometry import Polygon
 
 _NUTS3_GEOJSON_URL = (
     "https://gisco-services.ec.europa.eu/distribution/v2/nuts/geojson/"
@@ -30,7 +21,7 @@ def calculate_LST_from_bands(
         Band10,
         mtl_path,
         nuts3_code,
-    ) -> None:
+    ) -> xr.DataArray:
 
     BT = calculate_brightness_temperature(Band10, str(mtl_path))
     ndvi = ndvi_calculation(Band5, Band4)
