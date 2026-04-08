@@ -9,7 +9,10 @@ from typing import Any, Optional
 import requests
 from requests.exceptions import HTTPError
 from destinepyauth import get_token
+from shapely.wkt import loads as wkt_loads
 from tqdm import tqdm
+
+from lst_helper import get_nuts3_geom
 
 HDA_STAC_ENDPOINT = "https://hda.data.destination-earth.eu/stac/v2"
 STAC_DT_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
@@ -29,6 +32,7 @@ def search_products(
     datetime_range: str | None = None,
     limit: int = 10,
     endpoint: str = HDA_STAC_ENDPOINT,
+    nuts3_code: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     """Search STAC products by collection and datetime range."""
     auth_headers = _get_auth_headers()
@@ -38,6 +42,10 @@ def search_products(
     }
     if datetime_range is not None:
         payload["datetime"] = datetime_range
+    if nuts3_code is not None:
+        geom = wkt_loads(get_nuts3_geom(nuts3_code))
+        payload["intersects"] = geom.__geo_interface__
+        log.info(f"Filtering by NUTS3 region: {nuts3_code}")
 
     log.info(f"Search payload: {payload}")
     response = requests.post(f"{endpoint}/search", headers=auth_headers, json=payload, timeout=60)
@@ -227,6 +235,7 @@ def search_and_download(
     result_index: int = 0,
     limit: int = 1,
     endpoint: str = HDA_STAC_ENDPOINT,
+    nuts3_code: Optional[str] = None,
 ) -> list[Path]:
     """Search products, pick one result by index, and download one asset per suffix.
 
@@ -240,6 +249,7 @@ def search_and_download(
         datetime_range=datetime_range,
         limit=limit,
         endpoint=endpoint,
+        nuts3_code=nuts3_code,
     )
     if not features:
         raise ValueError("No products found for the given criteria")

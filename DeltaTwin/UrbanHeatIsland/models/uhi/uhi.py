@@ -9,7 +9,7 @@ import xarray as xr
 import rioxarray as rio
 import numpy as np
 
-from lst_helper import calculate_LST_from_bands, get_nuts3_geom
+from lst_helper import calculate_LST_from_bands
 from hda_helper import search_and_download
 
 
@@ -228,7 +228,7 @@ def main(
             asset_suffixes=download_asset_suffixes,
             result_index=download_result_index,
             limit=download_limit,
-            # nuts3_code=nuts3_code,
+            nuts3_code=nuts3_code,
         )
 
     try:
