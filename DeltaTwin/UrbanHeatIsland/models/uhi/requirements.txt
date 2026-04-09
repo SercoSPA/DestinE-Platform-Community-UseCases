@@ -1,0 +1,9 @@
+destinepyauth
+geopandas
+matplotlib
+numpy
+pandas
+requests
+rioxarray
+tqdm
+xarray

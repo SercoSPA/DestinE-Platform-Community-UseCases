@@ -1,26 +1,104 @@
-# Urban Heat Island (UHI): LST from Landsat
+# DeltaTwin Component: Urban Heat Island (UHI)
 
-Computes Land Surface Temperature (LST) over a NUTS3 region from Landsat Collection 2 Level-2 data accessed via the Destination Earth HDA API.
+The Urban Heat Island component downloads Landsat Collection 2 Level-2 products from the Destination Earth HDA service, computes Land Surface Temperature (LST) over a selected NUTS3 area, and exports:
 
-## How it works (`uhi.py`)
+- a GeoTIFF raster (`uhi_lst.tif`)
+- a combined LST/RGB plot (`uhi_lst_plot.png`)
 
-1. **Search**: queries the HDA STAC API for Landsat C2 L2 products matching a given date range and NUTS3 bounding box.
-2. **Cloud filter**: for each result, downloads only the MTL metadata file first and checks `CLOUD_COVER_LAND`; products exceeding the configured threshold are skipped.
-3. **Download**: once an acceptable product is found, the required bands are downloaded: B2 (Blue), B3 (Green), B4 (Red), B10 (TIRS-1 thermal), and QA_PIXEL.
-4. **Reproject**: all bands are reprojected to EPSG:4326.
-5. **LST calculation**: brightness temperature is derived from B10 using MTL gain/offset coefficients; NDVI (B4/B5 or equivalent) drives an emissivity estimate; LST is computed in °C.
-6. **Cloud masking**: pixels flagged in QA_PIXEL (cloud, cloud shadow, dilated cloud) are masked out.
-7. **NUTS3 clipping**: the LST raster is clipped to the boundary of the target NUTS3 region fetched from the Eurostat GISCO GeoJSON service.
-8. **Save outputs**: LST is written as a GeoTIFF (`<scene>_LST.tif`); a side-by-side RGB + LST PNG plot is also saved (`<scene>_LST_plot.png`).
+## Workflow
 
-## Example output
+The workflow is defined in [workflow.yml](workflow.yml) and connects component inputs to the UHI model and model outputs to component outputs declared in the manifest.
+
+| **Node** | **Kind** | **Description** |
+| -------- | -------- | --------------- |
+| user | input | DESP auth username passed to the model as the first CLI argument (`user`). |
+| password | input | DESP auth password passed to the model as the second CLI argument (`password`). |
+| uhi | model | Python model that searches Landsat products, applies cloud filtering, computes LST, and exports standard output files. |
+| plot | output | Output node wired to `outputs.uhi-plot` (`uhi_lst_plot.png`). |
+| raster | output | Output node wired to `outputs.uhi-raster` (`uhi_lst.tif`). |
+
+## Steps To Build The Component
+
+### Local testing of the model
+
+The model is implemented in [models/uhi/uhi.py](models/uhi/uhi.py) and accepts optional CLI credentials:
+
+```shell
+python models/uhi/uhi.py <username> <password>
+```
+
+Or, if credentials are already set in environment variables:
+
+```shell
+python models/uhi/uhi.py
+```
+
+The model writes deterministic files in its working directory:
+
+- `uhi_lst.tif`
+- `uhi_lst_plot.png`
+
+An example plot is shown below:
 
 ![LST example: Rome (ITI43)](assets/LST_EXAMLE_ROMA.png)
 
-## Notes on bands
+### Build and run locally with DeltaTwin
 
-- Landsat Level-2 products include atmospheric corrections.
-- Collection: `EO.NASA.DAT.LANDSAT.C2_L2`
-  - https://sesameo.destine.eu/collections/EO.NASA.DAT.LANDSAT.C2_L2
-  - https://data.destination-earth.eu/data-portfolio/EO.NASA.DAT.LANDSAT.C2_L2
-- Sentinel-2 does not carry a thermal band (TIRS), so LST from Sentinel-2 alone is not straightforward and is not implemented here.
+Inputs are provided through [inputs.json](inputs.json), for example:
+
+```json
+{
+  "user": {
+    "type": "string",
+    "value": "johnsmith"
+  },
+  "password": {
+    "type": "string",
+    "value": "XXXXXX"
+  }
+}
+```
+
+Two manifest variants are provided:
+
+- `manifest-local.json`: for local runs (`password` is `string`).
+- `manifest-remote.json`: for service runs (`password` is `secret`).
+
+Before running, copy the desired manifest to `manifest.json`:
+
+```shell
+cp manifest-local.json manifest.json
+deltatwin run start_local -i inputs.json
+```
+
+If this is your first run, DeltaTwin also builds the Docker image and installs model dependencies.
+
+### Publish to the DeltaTwin service
+
+Before publishing, select the remote manifest:
+
+```shell
+cp manifest-remote.json manifest.json
+```
+
+If needed, make the component name unique in `manifest.json` (for example by appending your username), then publish:
+
+```shell
+deltatwin component publish -t urban-heat -t tutorial 0.1.0
+```
+
+### Run on the service
+
+After publishing, run from the DeltaTwin UI:
+
+1. Login to https://app.deltatwin.destine.eu
+2. Select `DeltaTwins`
+3. Open your published `urban-heat-island` component
+4. Click `Run`
+5. Fill in `user` and `password`
+6. Start the run
+
+The run should produce:
+
+- `uhi_lst_plot.png`
+- `uhi_lst.tif`

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Sequence
@@ -149,7 +151,7 @@ def plot_combined(
 def calculate_LST_from_file(
         files: Sequence[str | Path],
         nuts3_code: Optional[str],
-    ) -> None:
+    ) -> tuple[Path, Optional[Path]]:
     file_paths = [Path(item) for item in files]
 
     def _find_path(suffix: str) -> Optional[Path]:
@@ -201,16 +203,21 @@ def calculate_LST_from_file(
     filename = str(output_dir / f"{scene_name}_LST")
     print(f"saving LST data to file: {filename}")
     # da.to_dataset(name="LST").to_netcdf(f"{filename}.nc"))
-    da.rio.to_raster(f"{filename}.tif")
+    lst_tif_path = Path(f"{filename}.tif")
+    da.rio.to_raster(str(lst_tif_path))
+    plot_path: Optional[Path] = None
     if Band2 is not None and Band3 is not None:
+        plot_path = Path(f"{filename}_plot.png")
         plot_combined(
             Band4, Band3, Band2, da,
-            f"{filename}_plot.png",
+            str(plot_path),
             nuts3_code=nuts3_code,
             scene_datetime=scene_datetime,
         )
     else:
         print("Skipping combined plot: B2 and/or B3 not available.")
+
+    return lst_tif_path, plot_path
 
 
 def _parse_cloud_cover_land(mtl_path: Path) -> float:
@@ -352,13 +359,34 @@ def main(
             )
 
     try:
-        calculate_LST_from_file(
+        lst_tif_path, plot_path = calculate_LST_from_file(
             downloaded_paths,
             nuts3_code,
         )
+
+        # Write stable output names for DeltaTwin output glob matching.
+        out_tif = Path("uhi_lst.tif")
+        shutil.copy2(lst_tif_path, out_tif)
+        print(f"Exported output raster: {out_tif}")
+
+        if plot_path is not None and plot_path.exists():
+            out_plot = Path("uhi_lst_plot.png")
+            shutil.copy2(plot_path, out_plot)
+            print(f"Exported output plot: {out_plot}")
+
+        return 0
     except Exception as e:
         print(f"Exception calculating LST from downloaded files: \n{e}")
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) not in (3, 1):
+        print("Usage: python uhi.py <username> <password>")
+        sys.exit(1)
+
+    if len(sys.argv) == 3:
+        os.environ["DESPAUTH_USER"] = sys.argv[1]
+        os.environ["DESPAUTH_PASSWORD"] = sys.argv[2]
+
+    sys.exit(main())

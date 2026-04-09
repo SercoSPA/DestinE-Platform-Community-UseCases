@@ -1,0 +1,110 @@
+{
+  "name": "urban-heat-island-dev",
+  "description": "Urban Heat Island component that downloads Landsat Collection 2 Level-2 data from HDA, computes Land Surface Temperature (LST), and exports a GeoTIFF plus a reference RGB/LST plot.",
+  "license": {
+    "name": "LGPLv3",
+    "url": "https://www.gnu.org/licenses/gpl-3.0.txt",
+    "description": "",
+    "copyrights": [
+      {
+        "years": [2026],
+        "company": "Serco"
+      }
+    ]
+  },
+  "owner": "Serco",
+
+  "inputs": {
+    "user": {
+      "type": "string",
+      "description": "DestinE Service Platform User Credentials."
+    },
+    "password": {
+      "type": "secret",
+      "description": "DestinE Service Platform Password Credentials."
+    }
+  },
+
+  "outputs": {
+    "uhi-plot": {
+      "type": "Data",
+      "description": "PNG plot combining LST and RGB overview"
+    },
+    "uhi-raster": {
+      "type": "Data",
+      "description": "LST raster as GeoTIFF"
+    }
+  },
+
+  "models": {
+    "uhi": {
+      "path": "models/uhi",
+      "type": "python",
+      "parameters": {
+        "pythonVersion": "3.11",
+        "aptRequirements": [
+          {
+            "name": "libexpat1"
+          },
+          {
+            "name": "libexpat1-dev"
+          }
+        ],
+        "pipRequirements": [
+          {
+            "name": "destinepyauth"
+          },
+          {
+            "name": "geopandas"
+          },
+          {
+            "name": "matplotlib"
+          },
+          {
+            "name": "numpy"
+          },
+          {
+            "name": "pandas"
+          },
+          {
+            "name": "requests"
+          },
+          {
+            "name": "rioxarray"
+          },
+          {
+            "name": "tqdm"
+          },
+          {
+            "name": "xarray"
+          }
+        ],
+        "hardwareRequirements": {
+          "cpu": "2000m",
+          "ram": "4Gi"
+        },
+        "command": "python uhi.py $(inputs.user) $(inputs.password)"
+      },
+      "inputs": {
+        "user": {
+          "type": "string"
+        },
+        "password": {
+          "type": "secret"
+        }
+      },
+      "outputs": {
+        "uhi-plot": {
+          "type": "Data",
+          "glob": "uhi_lst_plot.png"
+        },
+        "uhi-raster": {
+          "type": "Data",
+          "glob": "uhi_lst.tif"
+        }
+      }
+    }
+  },
+
+  "dependencies": {}
+}

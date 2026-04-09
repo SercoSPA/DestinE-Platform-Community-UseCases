@@ -1,0 +1,40 @@
+nodes:
+  - id: user
+    ref: inputs.user
+
+  - id: password
+    ref: inputs.password
+
+  - id: uhi
+    ref: models.uhi
+
+  - id: plot
+    ref: outputs.uhi-plot
+
+  - id: raster
+    ref: outputs.uhi-raster
+
+edges:
+  - from:
+      id: user
+    to:
+      id: uhi
+      port: user
+
+  - from:
+      id: password
+    to:
+      id: uhi
+      port: password
+
+  - from:
+      id: uhi
+      port: uhi-plot
+    to:
+      id: plot
+
+  - from:
+      id: uhi
+      port: uhi-raster
+    to:
+      id: raster
