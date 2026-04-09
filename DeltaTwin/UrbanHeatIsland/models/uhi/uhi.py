@@ -9,6 +9,7 @@ from typing import Optional, Sequence
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import xarray as xr
 import rioxarray as rio
 import numpy as np
@@ -125,6 +126,9 @@ def plot_combined(
     ax_lst.set_xlabel("Longitude")
     ax_lst.set_ylabel("Latitude")
     ax_lst.set_title("LST")
+    ax_lst.xaxis.set_major_locator(mticker.MaxNLocator(5))
+    ax_lst.tick_params(axis="x", rotation=45)
+    ax_lst.grid(True, color="grey", linewidth=0.4, alpha=0.5)
 
     # --- RGB panel ---
     ax_rgb = axes[1]
@@ -142,6 +146,8 @@ def plot_combined(
     ax_rgb.set_xlabel("Longitude")
     ax_rgb.set_ylabel("Latitude")
     ax_rgb.set_title("Reference RGB image")
+    ax_rgb.xaxis.set_major_locator(mticker.MaxNLocator(5))
+    ax_rgb.tick_params(axis="x", rotation=45)
 
     fig.savefig(png_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
