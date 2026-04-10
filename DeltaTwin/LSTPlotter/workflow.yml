@@ -5,6 +5,12 @@ nodes:
   - id: password
     ref: inputs.password
 
+  - id: city_name
+    ref: inputs.city_name
+
+  - id: download_date
+    ref: inputs.download_date
+
   - id: lst_plotter
     ref: models.lst_plotter
 
@@ -26,6 +32,18 @@ edges:
     to:
       id: lst_plotter
       port: password
+
+  - from:
+      id: city_name
+    to:
+      id: lst_plotter
+      port: city_name
+
+  - from:
+      id: download_date
+    to:
+      id: lst_plotter
+      port: download_date
 
   - from:
       id: lst_plotter

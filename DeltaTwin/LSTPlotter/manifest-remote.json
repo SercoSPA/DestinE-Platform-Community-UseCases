@@ -22,6 +22,14 @@
     "password": {
       "type": "secret",
       "description": "DestinE Service Platform Password Credentials."
+    },
+    "city_name": {
+      "type": "string",
+      "description": "City or region name used to select the NUTS3 area, e.g. 'Napoli' or 'Rome'."
+    },
+    "download_date": {
+      "type": "string",
+      "description": "End date for the Landsat image search in YYYY-MM-DD format. Defaults to today."
     }
   },
 
@@ -83,7 +91,7 @@
           "cpu": "2000m",
           "ram": "4Gi"
         },
-        "command": "python lst_plotter.py $(inputs.user) $(inputs.password)"
+        "command": "python lst_plotter.py $(inputs.user) $(inputs.password) $(inputs.city_name) $(inputs.download_date)"
       },
       "inputs": {
         "user": {
@@ -91,6 +99,12 @@
         },
         "password": {
           "type": "secret"
+        },
+        "city_name": {
+          "type": "string"
+        },
+        "download_date": {
+          "type": "string"
         }
       },
       "outputs": {

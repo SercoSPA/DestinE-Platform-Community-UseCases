@@ -406,12 +406,18 @@ def main(
 
 
 if __name__ == "__main__":
-    if len(sys.argv) not in (3, 1):
-        print("Usage: python lst_plotter.py <username> <password>")
+    if len(sys.argv) not in (1, 3, 4, 5):
+        print("Usage: python lst_plotter.py [<username> <password> [<city> [<date>]]]")
         sys.exit(1)
 
-    if len(sys.argv) == 3:
+    if len(sys.argv) >= 3:
         os.environ["DESPAUTH_USER"] = sys.argv[1]
         os.environ["DESPAUTH_PASSWORD"] = sys.argv[2]
 
-    sys.exit(main())
+    kwargs = {}
+    if len(sys.argv) >= 4:
+        kwargs["city_name"] = sys.argv[3]
+    if len(sys.argv) >= 5:
+        kwargs["download_date"] = sys.argv[4]
+
+    sys.exit(main(**kwargs))
