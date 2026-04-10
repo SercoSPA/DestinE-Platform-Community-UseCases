@@ -1,3 +1,5 @@
+![DestinE Banner](assets/DestinE-banner.jpg)
+
 # DestinE Platform Community Use Cases
 
 This repository contains community use cases for the DestinE Service Platform (DESP).
