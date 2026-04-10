@@ -30,7 +30,7 @@ For setup, local execution, publishing, and service-run instructions, refer to t
 
 ## License
 
-This project is licensed under the terms described in the [LICENSE](LICENSE) file.
+This project is licensed under the MIT License. See [LICENSE](LICENSE).
 
 ## Credits
 
