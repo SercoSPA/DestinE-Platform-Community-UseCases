@@ -5,36 +5,36 @@ nodes:
   - id: password
     ref: inputs.password
 
-  - id: uhi
-    ref: models.uhi
+  - id: lst_plotter
+    ref: models.lst_plotter
 
   - id: plot
-    ref: outputs.uhi-plot
+    ref: outputs.lst-plot
 
   - id: raster
-    ref: outputs.uhi-raster
+    ref: outputs.lst-raster
 
 edges:
   - from:
       id: user
     to:
-      id: uhi
+      id: lst_plotter
       port: user
 
   - from:
       id: password
     to:
-      id: uhi
+      id: lst_plotter
       port: password
 
   - from:
-      id: uhi
-      port: uhi-plot
+      id: lst_plotter
+      port: lst-plot
     to:
       id: plot
 
   - from:
-      id: uhi
-      port: uhi-raster
+      id: lst_plotter
+      port: lst-raster
     to:
       id: raster

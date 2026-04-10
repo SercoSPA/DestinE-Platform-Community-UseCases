@@ -390,12 +390,12 @@ def main(
         )
 
         # Write stable output names for DeltaTwin output glob matching.
-        out_tif = Path("uhi_lst.tif")
+        out_tif = Path("lst.tif")
         shutil.copy2(lst_tif_path, out_tif)
         print(f"Exported output raster: {out_tif}")
 
         if plot_path is not None and plot_path.exists():
-            out_plot = Path("uhi_lst_plot.png")
+            out_plot = Path("lst_plot.png")
             shutil.copy2(plot_path, out_plot)
             print(f"Exported output plot: {out_plot}")
 
@@ -407,7 +407,7 @@ def main(
 
 if __name__ == "__main__":
     if len(sys.argv) not in (3, 1):
-        print("Usage: python uhi.py <username> <password>")
+        print("Usage: python lst_plotter.py <username> <password>")
         sys.exit(1)
 
     if len(sys.argv) == 3:

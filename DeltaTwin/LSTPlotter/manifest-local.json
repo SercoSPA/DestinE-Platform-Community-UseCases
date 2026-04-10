@@ -26,19 +26,19 @@
   },
 
   "outputs": {
-    "uhi-plot": {
+    "lst-plot": {
       "type": "Data",
       "description": "PNG plot combining LST and RGB overview"
     },
-    "uhi-raster": {
+    "lst-raster": {
       "type": "Data",
       "description": "LST raster as GeoTIFF"
     }
   },
 
   "models": {
-    "uhi": {
-      "path": "models/uhi",
+    "lst_plotter": {
+      "path": "models/lst_plotter",
       "type": "python",
       "parameters": {
         "pythonVersion": "3.11",
@@ -83,7 +83,7 @@
           "cpu": "2000m",
           "ram": "4Gi"
         },
-        "command": "python uhi.py $(inputs.user) $(inputs.password)"
+        "command": "python lst_plotter.py $(inputs.user) $(inputs.password)"
       },
       "inputs": {
         "user": {
@@ -94,13 +94,13 @@
         }
       },
       "outputs": {
-        "uhi-plot": {
+        "lst-plot": {
           "type": "Data",
-          "glob": "uhi_lst_plot.png"
+          "glob": "lst_plot.png"
         },
-        "uhi-raster": {
+        "lst-raster": {
           "type": "Data",
-          "glob": "uhi_lst.tif"
+          "glob": "lst.tif"
         }
       }
     }
