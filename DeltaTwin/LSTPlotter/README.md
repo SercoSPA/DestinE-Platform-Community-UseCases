@@ -1,6 +1,6 @@
-# DeltaTwin Component: Urban Heat Island (UHI)
+# DeltaTwin Component: Land Surface Temperature (LST)
 
-The Urban Heat Island component downloads Landsat Collection 2 Level-2 products from the Destination Earth HDA service, computes Land Surface Temperature (LST) over a selected NUTS3 area, and exports:
+The Land Surface Temperature (LST) component downloads Landsat Collection 2 Level-2 products from the Destination Earth HDA service, computes LST over a selected NUTS3 area, and exports:
 
 - a GeoTIFF raster (`uhi_lst.tif`)
 - a combined LST/RGB plot (`uhi_lst_plot.png`)
@@ -84,7 +84,7 @@ cp manifest-remote.json manifest.json
 If needed, make the component name unique in `manifest.json` (for example by appending your username), then publish:
 
 ```shell
-deltatwin component publish -t urban-heat -t tutorial 0.1.0
+deltatwin component publish -t urban-heat-island -t tutorial 0.0
 ```
 
 ### Run on the service
@@ -93,7 +93,7 @@ After publishing, run from the DeltaTwin UI:
 
 1. Login to https://app.deltatwin.destine.eu
 2. Select `DeltaTwins`
-3. Open your published `urban-heat-island` component
+3. Open your published `lst-plotter` component
 4. Click `Run`
 5. Fill in `user` and `password`
 6. Start the run

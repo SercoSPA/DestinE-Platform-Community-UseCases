@@ -1,6 +1,6 @@
 {
-  "name": "urban-heat-island-dev",
-  "description": "Urban Heat Island component that downloads Landsat Collection 2 Level-2 data from HDA, computes Land Surface Temperature (LST), and exports a GeoTIFF plus a reference RGB/LST plot.",
+  "name": "lst-plotter-dev",
+  "description": "Land Surface Temperature (LST) component that downloads Landsat Collection 2 Level-2 data from HDA, computes Land Surface Temperature (LST), and exports a GeoTIFF plus a reference RGB/LST plot.",
   "license": {
     "name": "LGPLv3",
     "url": "https://www.gnu.org/licenses/gpl-3.0.txt",
@@ -20,7 +20,7 @@
       "description": "DestinE Service Platform User Credentials."
     },
     "password": {
-      "type": "secret",
+      "type": "string",
       "description": "DestinE Service Platform Password Credentials."
     }
   },
@@ -90,7 +90,7 @@
           "type": "string"
         },
         "password": {
-          "type": "secret"
+          "type": "string"
         }
       },
       "outputs": {

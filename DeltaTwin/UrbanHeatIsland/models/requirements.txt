@@ -1,8 +1,0 @@
-rioxarray
-xarray
-numpy
-geopandas
-regionmask
-destinepyauth
-tqdm
-eodag==3.10.1
