@@ -40,7 +40,7 @@ The model writes deterministic files in its working directory:
 
 An example plot is shown below:
 
-![LST example: Rome (ITI43)](assets/LST_EXAMLE_BRISTOL.png)
+![LST example: Rome (ITI43)](assets/LST_EXAMPLE_NAPOLI.png)
 
 ### Build and run locally with DeltaTwin
 

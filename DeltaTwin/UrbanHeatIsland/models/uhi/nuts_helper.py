@@ -28,7 +28,7 @@ def get_nuts3_geom(nuts3_code: str) -> BaseGeometry:
     return _load_nuts3_region(nuts3_code).geometry.union_all()
 
 
-def find_nuts3_by_name(name: str) -> str:
+def find_nuts3_by_name(name: str) -> tuple[str, str]:
     """Find the NUTS3 code that best matches a city or region name.
 
     Performs a case-insensitive substring search across the ``NUTS_NAME`` and
@@ -89,7 +89,7 @@ def find_nuts3_by_name(name: str) -> str:
     code = best_row["NUTS_ID"]
     region_name = best_row["NUTS_NAME"]
     print(f"Matched NUTS3 region: {region_name} ({code})")
-    return code
+    return code, region_name
 
 
 def mask_nuts3(

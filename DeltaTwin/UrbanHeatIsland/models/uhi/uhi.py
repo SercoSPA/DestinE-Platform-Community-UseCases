@@ -47,6 +47,7 @@ def plot_combined(
     band2: xr.DataArray,
     lst_da: xr.DataArray,
     png_path: str,
+    nuts3_region_name: str,
     nuts3_code: Optional[str] = None,
     scene_datetime: str = "",
 ) -> None:
@@ -92,7 +93,6 @@ def plot_combined(
 
     # Fetch NUTS3 geometry for outline and zoom extent
     nuts3_geom = None
-    region_name = nuts3_code or ""
     zoom_xlim = (extent_rgb[0], extent_rgb[1])
     zoom_ylim = (extent_rgb[2], extent_rgb[3])
     if nuts3_code is not None:
@@ -110,46 +110,61 @@ def plot_combined(
     lons_lst = lst_da.x.values
     lats_lst = lst_da.y.values
 
-    title = f"Land Surface Temperature (LST) from Landsat over {region_name}"
+    title = f"NUTS3 region: {nuts3_region_name} ({nuts3_code}),"
     if scene_datetime:
         title += f" at {scene_datetime}"
 
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4), constrained_layout=True)
-    fig.suptitle(title, fontsize=14, fontweight="bold")
+    # DestinE brand palette (platform.destine.eu)
+    _BRAND_PINK   = "#ef2b89"
+    _BRAND_PURPLE = "#7B34DB"
+    _BG           = "#F8F8F8"
+    _SPINE_COLOR  = "#cccccc"
 
-    # --- LST panel ---
-    ax_lst = axes[0]
-    img = ax_lst.pcolormesh(lons_lst, lats_lst, lst_data, cmap="hot_r", vmin=0, vmax=40)
-    fig.colorbar(img, ax=ax_lst, fraction=0.046, pad=0.04, label="LST (°C)")
-    ax_lst.set_xlim(*zoom_xlim)
-    ax_lst.set_ylim(*zoom_ylim)
-    ax_lst.set_xlabel("Longitude")
-    ax_lst.set_ylabel("Latitude")
-    ax_lst.set_title("LST")
-    ax_lst.xaxis.set_major_locator(mticker.MaxNLocator(5))
-    ax_lst.tick_params(axis="x", rotation=45)
-    ax_lst.grid(True, color="grey", linewidth=0.4, alpha=0.5)
+    with plt.rc_context({
+        "font.family": "Ubuntu Sans",
+        "font.size": 13,
+        "axes.facecolor": _BG,
+        "figure.facecolor": _SPINE_COLOR,
+        # "axes.titley": 1.0,
+        # "axes.titlepad": -14,
+    }):
+        fig, axes = plt.subplots(1, 2, figsize=(10, 4.5), constrained_layout=True)
+        fig.suptitle(title, fontsize=17)
 
-    # --- RGB panel ---
-    ax_rgb = axes[1]
-    ax_rgb.imshow(rgb, extent=extent_rgb, origin=origin_rgb, aspect="auto")
-    if nuts3_geom is not None:
-        gpd.GeoSeries([nuts3_geom], crs="EPSG:4326").plot(
-            ax=ax_rgb,
-            facecolor="none",
-            edgecolor="grey",
-            linewidth=1.5,
-            aspect=None,
-        )
-    ax_rgb.set_xlim(*zoom_xlim)
-    ax_rgb.set_ylim(*zoom_ylim)
-    ax_rgb.set_xlabel("Longitude")
-    ax_rgb.set_ylabel("Latitude")
-    ax_rgb.set_title("Reference RGB image")
-    ax_rgb.xaxis.set_major_locator(mticker.MaxNLocator(5))
-    ax_rgb.tick_params(axis="x", rotation=45)
+        # --- LST panel ---
+        ax_lst = axes[0]
+        img = ax_lst.pcolormesh(lons_lst, lats_lst, lst_data, cmap="hot_r", vmin=0, vmax=40)
+        cbar = fig.colorbar(img, ax=ax_lst, fraction=0.046, pad=0.04, label="LST (°C)")
+        cbar.outline.set_edgecolor(_SPINE_COLOR)
+        ax_lst.set_xlim(*zoom_xlim)
+        ax_lst.set_ylim(*zoom_ylim)
+        ax_lst.set_xlabel("Longitude")
+        ax_lst.set_ylabel("Latitude")
+        ax_lst.set_title("Land Surface Temperature", color=_BRAND_PURPLE)
+        ax_lst.xaxis.set_major_locator(mticker.MaxNLocator(5))
+        ax_lst.tick_params(axis="x", rotation=45)
+        ax_lst.grid(True, color="grey", linewidth=0.5, alpha=0.6, zorder=0)
 
-    fig.savefig(png_path, dpi=150, bbox_inches="tight")
+        # --- RGB panel ---
+        ax_rgb = axes[1]
+        ax_rgb.imshow(rgb, extent=extent_rgb, origin=origin_rgb, aspect="auto")
+        if nuts3_geom is not None:
+            gpd.GeoSeries([nuts3_geom], crs="EPSG:4326").plot(
+                ax=ax_rgb,
+                facecolor="none",
+                edgecolor=_BRAND_PINK,
+                linewidth=1.5,
+                aspect=None,
+            )
+        ax_rgb.set_xlim(*zoom_xlim)
+        ax_rgb.set_ylim(*zoom_ylim)
+        ax_rgb.set_xlabel("Longitude")
+        ax_rgb.set_ylabel("Latitude")
+        ax_rgb.set_title("Reference Landsat RGB image", color=_BRAND_PURPLE, )
+        ax_rgb.xaxis.set_major_locator(mticker.MaxNLocator(5))
+        ax_rgb.tick_params(axis="x", rotation=45)
+
+        fig.savefig(png_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"Combined plot saved to: {png_path}")
 
@@ -157,6 +172,7 @@ def plot_combined(
 def calculate_LST_from_file(
         files: Sequence[str | Path],
         nuts3_code: Optional[str],
+        region_name: str,
     ) -> tuple[Path, Optional[Path]]:
     file_paths = [Path(item) for item in files]
 
@@ -217,6 +233,7 @@ def calculate_LST_from_file(
         plot_combined(
             Band4, Band3, Band2, da,
             str(plot_path),
+            nuts3_region_name=region_name,
             nuts3_code=nuts3_code,
             scene_datetime=scene_datetime,
         )
@@ -244,7 +261,7 @@ def main(
         "B2.TIF", "B3.TIF", "B4.TIF", "B10.TIF", "MTL.TXT", "QA_PIXEL.TIF"
         ],
     download_limit: int = 10,
-    city_name: Optional[str] = "Bristol",
+    city_name: str = "Napoli",
     cloud_cover_land_threshold: float = 50.0,
 ) -> int:
     """Download Landsat products from HDA and compute LST for each product.
@@ -273,11 +290,10 @@ def main(
         search result (case-insensitive endswith match), e.g. ["B4.TIF", "B7.TIF"].
         ``MTL.TXT`` is always fetched first for the cloud check; other suffixes
         may or may not include it.
-    city_name : str or None
+    city_name : str
         Free-text city or region name used to look up the Eurostat NUTS3 region
         for spatial masking, e.g. ``"Rome"`` or ``"Rotterdam"``.
         The best-matching region is resolved via :func:`nuts_helper.find_nuts3_by_name`.
-        Pass ``None`` to skip masking and return LST for the full scene.
     cloud_cover_land_threshold : float
         Maximum acceptable ``CLOUD_COVER_LAND`` percentage (0–100).
         Products above this value are skipped.
@@ -299,7 +315,9 @@ def main(
     )
     print(f"Searching for images between {start_dt.date()} and {end_dt.date()}")
 
-    nuts3_code = find_nuts3_by_name(city_name) if city_name is not None else None
+    if city_name is None:
+        raise ValueError("city_name must be provided to resolve a NUTS3 region.")
+    nuts3_code, region_name = find_nuts3_by_name(city_name)
 
     if not download_asset_suffixes:
         raise ValueError("download_asset_suffixes must contain at least one suffix.")
@@ -368,6 +386,7 @@ def main(
         lst_tif_path, plot_path = calculate_LST_from_file(
             downloaded_paths,
             nuts3_code,
+            region_name,
         )
 
         # Write stable output names for DeltaTwin output glob matching.
