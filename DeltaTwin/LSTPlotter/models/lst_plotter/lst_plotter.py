@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Sequence
@@ -17,6 +18,9 @@ import numpy as np
 from lst_helper import calculate_LST_from_L2_bands
 from hda_helper import search_products, download_single_asset
 from nuts_helper import find_nuts3_by_name, get_nuts3_geom
+
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_scene_datetime(scene_name: str, mtl_path: Optional[Path] = None) -> str:
@@ -166,7 +170,7 @@ def plot_combined(
 
         fig.savefig(png_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
-    print(f"Combined plot saved to: {png_path}")
+    logger.info(f"Combined plot saved to: {png_path}")
 
 
 def calculate_LST_from_file(
@@ -174,6 +178,22 @@ def calculate_LST_from_file(
         nuts3_code: Optional[str],
         region_name: str,
     ) -> tuple[Path, Optional[Path]]:
+    """Compute LST outputs from downloaded Landsat files.
+
+    Parameters
+    ----------
+    files : Sequence[str | Path]
+        Downloaded file paths including at least ``B10.TIF`` and ``MTL.TXT``.
+    nuts3_code : Optional[str]
+        NUTS3 region code used for masking.
+    region_name : str
+        Human-readable region name used in plot title.
+
+    Returns
+    -------
+    tuple[Path, Optional[Path]]
+        Paths to the generated LST GeoTIFF and optional combined PNG plot.
+    """
     file_paths = [Path(item) for item in files]
 
     def _find_path(suffix: str) -> Optional[Path]:
@@ -208,7 +228,7 @@ def calculate_LST_from_file(
             scene_name = scene_name[: -len(token)]
             break
 
-    print(f"Using inputs: {band10_path.name}, {mtl_path.name}")
+    logger.info(f"Using inputs: {band10_path.name}, {mtl_path.name}")
     output_dir = band4_path.parent
 
     Band4 = rio.open_rasterio(str(band4_path)).rio.reproject("EPSG:4326")
@@ -217,13 +237,13 @@ def calculate_LST_from_file(
     Band2 = rio.open_rasterio(str(band2_path)).rio.reproject("EPSG:4326") if band2_path else None
     QA_Pixel = rio.open_rasterio(str(qa_pixel_path)).rio.reproject("EPSG:4326") if qa_pixel_path else None
     if QA_Pixel is None:
-        print("QA_PIXEL band not found; cloud masking will be skipped.")
+        logger.warning("QA_PIXEL band not found; cloud masking will be skipped.")
 
     da = calculate_LST_from_L2_bands(Band10, mtl_path, nuts3_code, QA_Pixel)
 
     scene_datetime = _parse_scene_datetime(scene_name, mtl_path)
     filename = str(output_dir / f"{scene_name}_LST")
-    print(f"saving LST data to file: {filename}")
+    logger.info(f"Saving LST data to file: {filename}")
     # da.to_dataset(name="LST").to_netcdf(f"{filename}.nc"))
     lst_tif_path = Path(f"{filename}.tif")
     da.rio.to_raster(str(lst_tif_path))
@@ -238,7 +258,7 @@ def calculate_LST_from_file(
             scene_datetime=scene_datetime,
         )
     else:
-        print("Skipping combined plot: B2 and/or B3 not available.")
+        logger.warning("Skipping combined plot: B2 and/or B3 not available.")
 
     return lst_tif_path, plot_path
 
@@ -313,7 +333,7 @@ def main(
     download_datetime_range = (
         f"{start_dt.strftime('%Y-%m-%dT%H:%M:%SZ')}/{end_dt.strftime('%Y-%m-%dT%H:%M:%SZ')}"
     )
-    print(f"Searching for images between {start_dt.date()} and {end_dt.date()}")
+    logger.info(f"Searching for images between {start_dt.date()} and {end_dt.date()}")
 
     if city_name is None:
         raise ValueError("city_name must be provided to resolve a NUTS3 region.")
@@ -336,7 +356,10 @@ def main(
                 existing_paths.append(match)
 
     if len(existing_paths) == len(download_asset_suffixes):
-        print(f"All {len(existing_paths)} required files already exist, skipping download.")
+        logger.info(
+            "All %d required files already exist, skipping download.",
+            len(existing_paths),
+        )
         downloaded_paths = existing_paths
     else:
         features = search_products(
@@ -356,15 +379,19 @@ def main(
             mtl_path = download_single_asset(product, "MTL.TXT", out_path)
             cloud_cover = _parse_cloud_cover_land(mtl_path)
             if cloud_cover > cloud_cover_land_threshold:
-                print(
-                    f"Skipping product '{product_id}': "
-                    f"CLOUD_COVER_LAND={cloud_cover:.1f}% > {cloud_cover_land_threshold}%"
+                logger.info(
+                    "Skipping product '%s': CLOUD_COVER_LAND=%.1f%% > %.1f%%",
+                    product_id,
+                    cloud_cover,
+                    cloud_cover_land_threshold,
                 )
                 mtl_path.unlink(missing_ok=True)
                 continue
 
-            print(
-                f"Product '{product_id}' accepted: CLOUD_COVER_LAND={cloud_cover:.1f}%"
+            logger.info(
+                "Product '%s' accepted: CLOUD_COVER_LAND=%.1f%%",
+                product_id,
+                cloud_cover,
             )
 
             # Download the remaining assets (skip MTL.TXT — already downloaded)
@@ -392,22 +419,27 @@ def main(
         # Write stable output names for DeltaTwin output glob matching.
         out_tif = Path("lst.tif")
         shutil.copy2(lst_tif_path, out_tif)
-        print(f"Exported output raster: {out_tif}")
+        logger.info(f"Exported output raster: {out_tif}")
 
         if plot_path is not None and plot_path.exists():
             out_plot = Path("lst_plot.png")
             shutil.copy2(plot_path, out_plot)
-            print(f"Exported output plot: {out_plot}")
+            logger.info(f"Exported output plot: {out_plot}")
 
         return 0
-    except Exception as e:
-        print(f"Exception calculating LST from downloaded files: \n{e}")
+    except Exception:
+        logger.exception("Exception calculating LST from downloaded files")
         return 1
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s [%(name)s:%(funcName)s] %(message)s",
+    )
+
     if len(sys.argv) not in (1, 3, 4, 5):
-        print("Usage: python lst_plotter.py [<username> <password> [<city> [<date>]]]")
+        logger.error("Usage: python lst_plotter.py [<username> <password> [<city> [<date>]]]")
         sys.exit(1)
 
     if len(sys.argv) >= 3:
