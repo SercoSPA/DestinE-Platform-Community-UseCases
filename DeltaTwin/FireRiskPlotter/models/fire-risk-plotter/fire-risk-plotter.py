@@ -317,8 +317,12 @@ def _process_and_plot_fwi(h5_file: Path, plot_index: int) -> None:
     Output:
         Saves PNG file with dual-panel FWI/Risk visualization
     """
-    # Create plot
     output_file = f"firerisk{plot_index}.png"
+
+    # DestinE brand palette (platform.destine.eu)
+    _BRAND_PURPLE = "#7B34DB"
+    _BG           = "#F8F8F8"
+    _SPINE_COLOR  = "#cccccc"
 
     # Discrete Risk classes (1..5): green, yellow, then darker reds
     risk_colors = [
@@ -345,50 +349,63 @@ def _process_and_plot_fwi(h5_file: Path, plot_index: int) -> None:
     forecast_dt = forecast_dt.strftime("%Y-%m-%d, %H%M")
     forecast_descr = f"{forecast_dt} Z +{forecast_offset}h"
 
-
-    # plot
     plot_crs = ccrs.epsg(3035)
-    _, axes = plt.subplots(1, 2, figsize=(12, 5), subplot_kw={"projection": plot_crs})
-
     borders = cfeature.BORDERS.with_scale("50m")
     coastlines = cfeature.COASTLINE.with_scale("50m")
-
     fwi_cmap = plt.get_cmap("YlOrRd", 5)
 
-    fwi.plot(
-        ax=axes[0],
-        vmin=0,
-        vmax=5000,
-        cmap=fwi_cmap,
-        transform=plot_crs,
-        cbar_kwargs={"label": ""},
-    )
-    axes[0].add_feature(borders, linewidth=1)
-    axes[0].add_feature(coastlines, linewidth=1)
-    axes[0].set_title(f"MSG Fire Weather Index at {forecast_descr}")
+    with plt.rc_context({
+        "font.family": "Ubuntu Sans",
+        "font.size": 13,
+        "figure.facecolor": _SPINE_COLOR,
+    }):
+        fig, axes = plt.subplots(
+            1, 2, figsize=(12, 5),
+            subplot_kw={"projection": plot_crs},
+            constrained_layout=True,
+        )
+        fig.suptitle(f"Fire Weather Index Forecast at {forecast_descr}", fontsize=17)
 
-    risk_plot = risk.plot(
-        ax=axes[1],
-        cmap=risk_cmap,
-        norm=risk_norm,
-        transform=plot_crs,
-        cbar_kwargs={
-            'label': '',
-            'ticks': [1, 2, 3, 4, 5],
-            'boundaries': risk_bounds,
-            'spacing': 'proportional',
-            'drawedges': True,
-        },
-    )
-    risk_plot.colorbar.set_ticklabels(['Low', 'Moderate', 'High', 'Very High', 'Extreme'])
-    axes[1].add_feature(borders, linewidth=1)
-    axes[1].add_feature(coastlines, linewidth=1)
-    axes[1].set_title(f"MSG Fire Risk at {forecast_descr}")
+        for ax in axes:
+            ax.set_facecolor(_BG)
 
-    plt.tight_layout()
-    plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        fwi_plot = fwi.plot(
+            ax=axes[0],
+            vmin=0,
+            vmax=5000,
+            cmap=fwi_cmap,
+            transform=plot_crs,
+            cbar_kwargs={"label": ""},
+        )
+        fwi_plot.colorbar.outline.set_edgecolor(_SPINE_COLOR)
+        axes[0].add_feature(borders, linewidth=1)
+        axes[0].add_feature(coastlines, linewidth=1)
+        axes[0].gridlines(color="grey", linewidth=0.4, alpha=0.5)
+        axes[0].set_title("Fire Weather Index", color=_BRAND_PURPLE)
+
+        risk_plot = risk.plot(
+            ax=axes[1],
+            cmap=risk_cmap,
+            norm=risk_norm,
+            transform=plot_crs,
+            cbar_kwargs={
+                "label": "",
+                "ticks": [1, 2, 3, 4, 5],
+                "boundaries": risk_bounds,
+                "spacing": "proportional",
+                "drawedges": True,
+            },
+        )
+        risk_plot.colorbar.set_ticklabels(["Low", "Moderate", "High", "Very High", "Extreme"])
+        risk_plot.colorbar.outline.set_edgecolor(_SPINE_COLOR)
+        axes[1].add_feature(borders, linewidth=1)
+        axes[1].add_feature(coastlines, linewidth=1)
+        axes[1].gridlines(color="grey", linewidth=0.4, alpha=0.5)
+        axes[1].set_title("Fire Risk", color=_BRAND_PURPLE)
+
+        fig.savefig(output_file, dpi=150, bbox_inches="tight")
+    plt.close(fig)
     log.info(f"Plot saved: {output_file}")
-    plt.close()
 
 
 def main(out_path: Path = Path("./.delta")):
