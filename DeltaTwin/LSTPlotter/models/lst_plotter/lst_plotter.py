@@ -126,12 +126,9 @@ def plot_combined(
     _SPINE_COLOR  = "#cccccc"
 
     with plt.rc_context({
-        "font.family": "Ubuntu Sans",
         "font.size": 13,
         "axes.facecolor": _BG,
         "figure.facecolor": _SPINE_COLOR,
-        # "axes.titley": 1.0,
-        # "axes.titlepad": -14,
     }):
         fig, axes = plt.subplots(1, 2, figsize=(10, 4.5), constrained_layout=True)
         fig.suptitle(title, fontsize=17)

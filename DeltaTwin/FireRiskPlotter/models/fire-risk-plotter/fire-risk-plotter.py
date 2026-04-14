@@ -355,7 +355,6 @@ def _process_and_plot_fwi(h5_file: Path, plot_index: int) -> None:
     fwi_cmap = plt.get_cmap("YlOrRd", 5)
 
     with plt.rc_context({
-        "font.family": "Ubuntu Sans",
         "font.size": 13,
         "figure.facecolor": _SPINE_COLOR,
     }):
