@@ -29,7 +29,7 @@
     },
     "download_date": {
       "type": "string",
-      "description": "End date for the Landsat image search in YYYY-MM-DD format. Defaults to today."
+      "description": "End date for the Landsat image search in YYYY-MM-DD format."
     }
   },
 
