@@ -15,24 +15,24 @@ from nuts_helper import get_nuts3_geom
 HDA_STAC_ENDPOINT = "https://hda.data.destination-earth.eu/stac/v2"
 STAC_DT_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
-logging.getLogger(__name__).addHandler(logging.NullHandler())
 log = logging.getLogger(__name__)
 
 
-def _get_auth_headers() -> dict[str, str]:
+def get_auth_headers() -> dict[str, str]:
     access_token = get_token("hda").access_token
     return {"Authorization": f"Bearer {access_token}"}
 
 
 def search_products(
     collection_id: str,
+    auth_headers: dict[str, str],
     datetime_range: str | None = None,
     limit: int = 10,
     endpoint: str = HDA_STAC_ENDPOINT,
     nuts3_code: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     """Search STAC products by collection and datetime range."""
-    auth_headers = _get_auth_headers()
+    intersects_bounds: Optional[tuple[float, float, float, float]] = None
     payload = {
         "collections": [collection_id],
         "limit": limit,
@@ -42,9 +42,16 @@ def search_products(
     if nuts3_code is not None:
         geom = get_nuts3_geom(nuts3_code)
         payload["intersects"] = geom.__geo_interface__
+        intersects_bounds = geom.bounds
         log.info(f"Filtering by NUTS3 region: {nuts3_code}")
 
-    log.info(f"Search payload: {payload}")
+    log.info(
+        "Search request: collections=%s, limit=%s, datetime=%s, intersects=%s",
+        payload["collections"],
+        payload["limit"],
+        payload.get("datetime"),
+        intersects_bounds,
+    )
     response = requests.post(f"{endpoint}/search", headers=auth_headers, json=payload, timeout=60)
     try:
         response.raise_for_status()
@@ -162,10 +169,10 @@ def _download_asset(
     product: dict[str, Any],
     asset_key: str,
     out_path: Path,
+    auth_headers: dict[str, str],
     max_retries: int = 3,
 ) -> Path:
     product_id = product.get("id", "unknown-product")
-    auth_headers = _get_auth_headers()
     asset_url = _resolve_asset_url(product, asset_key)
 
     log.info(f"=== Downloading product '{product_id}', asset '{asset_key}' ===")
@@ -212,6 +219,7 @@ def _download_asset(
         except Exception as e:
             if tmp_path is not None and tmp_path.exists():
                 tmp_path.unlink()
+
             if attempt < max_retries - 1:
                 log.warning(f"Attempt {attempt + 1}/{max_retries} failed: {e}. Retrying in 5s...")
                 time.sleep(5)
@@ -228,8 +236,9 @@ def download_single_asset(
     product: dict[str, Any],
     asset_suffix: str,
     out_path: Path,
+    auth_headers: dict[str, str],
 ) -> Path:
     """Download a single asset from a product feature by suffix match."""
     asset_key = resolve_asset_key_by_suffix(product, asset_suffix)
     log.info(f"Suffix '{asset_suffix}' -> asset key: {asset_key}")
-    return _download_asset(product=product, asset_key=asset_key, out_path=out_path)
+    return _download_asset(product, asset_key, out_path, auth_headers)

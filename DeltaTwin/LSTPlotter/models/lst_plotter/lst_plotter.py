@@ -16,11 +16,12 @@ import rioxarray as rio
 import numpy as np
 
 from lst_helper import calculate_LST_from_L2_bands
-from hda_helper import search_products, download_single_asset
+from hda_helper import search_products, download_single_asset, get_auth_headers
 from nuts_helper import find_nuts3_by_name, get_nuts3_geom
 
-
-logger = logging.getLogger(__name__)
+logging.getLogger(__name__).addHandler(logging.NullHandler())
+log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
 
 
 def _parse_scene_datetime(scene_name: str, mtl_path: Optional[Path] = None) -> str:
@@ -170,7 +171,7 @@ def plot_combined(
 
         fig.savefig(png_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
-    logger.info(f"Combined plot saved to: {png_path}")
+    log.info(f"Combined plot saved to: {png_path}")
 
 
 def calculate_LST_from_file(
@@ -228,7 +229,7 @@ def calculate_LST_from_file(
             scene_name = scene_name[: -len(token)]
             break
 
-    logger.info(f"Using inputs: {band10_path.name}, {mtl_path.name}")
+    log.info(f"Using inputs: {band10_path.name}, {mtl_path.name}")
     output_dir = band4_path.parent
 
     Band4 = rio.open_rasterio(str(band4_path)).rio.reproject("EPSG:4326")
@@ -237,13 +238,13 @@ def calculate_LST_from_file(
     Band2 = rio.open_rasterio(str(band2_path)).rio.reproject("EPSG:4326") if band2_path else None
     QA_Pixel = rio.open_rasterio(str(qa_pixel_path)).rio.reproject("EPSG:4326") if qa_pixel_path else None
     if QA_Pixel is None:
-        logger.warning("QA_PIXEL band not found; cloud masking will be skipped.")
+        log.warning("QA_PIXEL band not found; cloud masking will be skipped.")
 
     da = calculate_LST_from_L2_bands(Band10, mtl_path, nuts3_code, QA_Pixel)
 
     scene_datetime = _parse_scene_datetime(scene_name, mtl_path)
     filename = str(output_dir / f"{scene_name}_LST")
-    logger.info(f"Saving LST data to file: {filename}")
+    log.info(f"Saving LST data to file: {filename}")
     # da.to_dataset(name="LST").to_netcdf(f"{filename}.nc"))
     lst_tif_path = Path(f"{filename}.tif")
     da.rio.to_raster(str(lst_tif_path))
@@ -258,7 +259,7 @@ def calculate_LST_from_file(
             scene_datetime=scene_datetime,
         )
     else:
-        logger.warning("Skipping combined plot: B2 and/or B3 not available.")
+        log.warning("Skipping combined plot: B2 and/or B3 not available.")
 
     return lst_tif_path, plot_path
 
@@ -333,7 +334,7 @@ def main(
     download_datetime_range = (
         f"{start_dt.strftime('%Y-%m-%dT%H:%M:%SZ')}/{end_dt.strftime('%Y-%m-%dT%H:%M:%SZ')}"
     )
-    logger.info(f"Searching for images between {start_dt.date()} and {end_dt.date()}")
+    log.info(f"Searching for images between {start_dt.date()} and {end_dt.date()}")
 
     if city_name is None:
         raise ValueError("city_name must be provided to resolve a NUTS3 region.")
@@ -356,14 +357,17 @@ def main(
                 existing_paths.append(match)
 
     if len(existing_paths) == len(download_asset_suffixes):
-        logger.info(
+        log.info(
             "All %d required files already exist, skipping download.",
             len(existing_paths),
         )
         downloaded_paths = existing_paths
     else:
+        auth_headers = get_auth_headers()
+
         features = search_products(
             collection_id=download_collection_id,
+            auth_headers=auth_headers,
             datetime_range=download_datetime_range,
             limit=download_limit,
             nuts3_code=nuts3_code,
@@ -376,10 +380,10 @@ def main(
             product_id = product.get("id", "unknown")
 
             # Download MTL first to check cloud cover before fetching large assets
-            mtl_path = download_single_asset(product, "MTL.TXT", out_path)
+            mtl_path = download_single_asset(product, "MTL.TXT", out_path, auth_headers)
             cloud_cover = _parse_cloud_cover_land(mtl_path)
             if cloud_cover > cloud_cover_land_threshold:
-                logger.info(
+                log.info(
                     "Skipping product '%s': CLOUD_COVER_LAND=%.1f%% > %.1f%%",
                     product_id,
                     cloud_cover,
@@ -388,7 +392,7 @@ def main(
                 mtl_path.unlink(missing_ok=True)
                 continue
 
-            logger.info(
+            log.info(
                 "Product '%s' accepted: CLOUD_COVER_LAND=%.1f%%",
                 product_id,
                 cloud_cover,
@@ -399,7 +403,7 @@ def main(
             for suffix in download_asset_suffixes:
                 if suffix.upper() == "MTL.TXT":
                     continue
-                paths.append(download_single_asset(product, suffix, out_path))
+                paths.append(download_single_asset(product, suffix, out_path, auth_headers))
             downloaded_paths = paths
             break
 
@@ -419,16 +423,16 @@ def main(
         # Write stable output names for DeltaTwin output glob matching.
         out_tif = Path("lst.tif")
         shutil.copy2(lst_tif_path, out_tif)
-        logger.info(f"Exported output raster: {out_tif}")
+        log.info(f"Exported output raster: {out_tif}")
 
         if plot_path is not None and plot_path.exists():
             out_plot = Path("lst_plot.png")
             shutil.copy2(plot_path, out_plot)
-            logger.info(f"Exported output plot: {out_plot}")
+            log.info(f"Exported output plot: {out_plot}")
 
         return 0
     except Exception:
-        logger.exception("Exception calculating LST from downloaded files")
+        log.exception("Exception calculating LST from downloaded files")
         return 1
 
 
@@ -439,7 +443,7 @@ if __name__ == "__main__":
     )
 
     if len(sys.argv) not in (1, 3, 4, 5):
-        logger.error("Usage: python lst_plotter.py [<username> <password> [<city> [<date>]]]")
+        log.error("Usage: python lst_plotter.py [<username> <password> [<city> [<date>]]]")
         sys.exit(1)
 
     if len(sys.argv) >= 3:
@@ -452,4 +456,4 @@ if __name__ == "__main__":
     if len(sys.argv) >= 5:
         kwargs["download_date"] = sys.argv[4]
 
-    sys.exit(main(**kwargs))
+    main(**kwargs)

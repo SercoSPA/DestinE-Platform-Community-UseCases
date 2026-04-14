@@ -8,7 +8,7 @@ import xarray as xr
 import geopandas as gpd
 
 
-logger = logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 _NUTS3_GEOJSON_URL = (
     "https://gisco-services.ec.europa.eu/distribution/v2/nuts/geojson/"
@@ -93,7 +93,7 @@ def find_nuts3_by_name(name: str) -> tuple[str, str]:
     best_row = candidates.iloc[candidates.apply(_similarity, axis=1).values.argmax()]
     code = best_row["NUTS_ID"]
     region_name = best_row["NUTS_NAME"]
-    logger.info(f"Matched NUTS3 region: {region_name} ({code})")
+    log.info(f"Matched NUTS3 region: {region_name} ({code})")
     return code, region_name
 
 
@@ -117,6 +117,6 @@ def mask_nuts3(
         Input data clipped to the requested NUTS3 region.
     """
     region = _load_nuts3_region(nuts3_code)
-    logger.info(f"Using NUTS3 region: {region['NUTS_NAME'].iloc[0]} ({nuts3_code})")
+    log.info(f"Using NUTS3 region: {region['NUTS_NAME'].iloc[0]} ({nuts3_code})")
     return da.rio.clip(region.geometry.values, crs=region.crs, drop=False, all_touched=True)
 
