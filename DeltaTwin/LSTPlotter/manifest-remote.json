@@ -60,7 +60,8 @@
         ],
         "pipRequirements": [
           {
-            "name": "destinepyauth"
+            "name": "destinepyauth",
+            "version": "1.3.0"
           },
           {
             "name": "geopandas"
@@ -88,8 +89,8 @@
           }
         ],
         "hardwareRequirements": {
-          "cpu": "2000m",
-          "ram": "4Gi"
+          "cpu": "8000m",
+          "ram": "16Gi"
         },
         "command": "python lst_plotter.py $(inputs.user) $(inputs.password) $(inputs.city_name) $(inputs.download_date)"
       },
