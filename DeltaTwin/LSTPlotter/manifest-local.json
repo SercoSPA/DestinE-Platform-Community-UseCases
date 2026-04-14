@@ -1,5 +1,5 @@
 {
-  "name": "lst-plotter-dev",
+  "name": "lst-plotter",
   "description": "Land Surface Temperature (LST) component that downloads Landsat Collection 2 Level-2 data from HDA, computes Land Surface Temperature (LST), and exports a GeoTIFF plus a reference RGB/LST plot.",
   "license": {
     "name": "LGPLv3",
