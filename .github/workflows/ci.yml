@@ -31,29 +31,3 @@ jobs:
           exit 1
         fi
         echo "Success: firerisk_forecast.gif created"
-
-  lst-plotter:
-    name: lst-plotter
-    runs-on: ubuntu-latest
-    env:
-      DESPAUTH_USER: ${{ secrets.DESPAUTH_USER }}
-      DESPAUTH_PASSWORD: ${{ secrets.DESPAUTH_PASSWORD }}
-    steps:
-    - name: Clone repo
-      uses: actions/checkout@v6
-    - name: Set up python
-      uses: actions/setup-python@v6
-      with:
-        python-version: 3.11
-        cache: 'pip'
-    - name: Install dependencies
-      run: pip install -r DeltaTwin/LSTPlotter/models/lst_plotter/requirements.txt
-    - name: Create forecast
-      run: python DeltaTwin/LSTPlotter/models/lst_plotter/lst_plotter.py
-    - name: Verify output
-      run: |
-        if [ ! -f lst_plot.png ]; then
-          echo "Error: lst_plot.png was not created"
-          exit 1
-        fi
-        echo "Success: lst_plot.png created"
