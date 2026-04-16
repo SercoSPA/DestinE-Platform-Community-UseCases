@@ -6,8 +6,8 @@ on:
 
 jobs:
 
-  build_test:
-    name: build_test
+  fire-risk-plotter:
+    name: fire-risk-plotter
     runs-on: ubuntu-latest
     env:
       DESPAUTH_USER: ${{ secrets.DESPAUTH_USER }}

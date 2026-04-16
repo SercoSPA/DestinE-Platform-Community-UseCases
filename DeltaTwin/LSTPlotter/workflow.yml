@@ -1,0 +1,58 @@
+nodes:
+  - id: user
+    ref: inputs.user
+
+  - id: password
+    ref: inputs.password
+
+  - id: city_name
+    ref: inputs.city_name
+
+  - id: download_date
+    ref: inputs.download_date
+
+  - id: lst_plotter
+    ref: models.lst_plotter
+
+  - id: plot
+    ref: outputs.lst-plot
+
+  - id: raster
+    ref: outputs.lst-raster
+
+edges:
+  - from:
+      id: user
+    to:
+      id: lst_plotter
+      port: user
+
+  - from:
+      id: password
+    to:
+      id: lst_plotter
+      port: password
+
+  - from:
+      id: city_name
+    to:
+      id: lst_plotter
+      port: city_name
+
+  - from:
+      id: download_date
+    to:
+      id: lst_plotter
+      port: download_date
+
+  - from:
+      id: lst_plotter
+      port: lst-plot
+    to:
+      id: plot
+
+  - from:
+      id: lst_plotter
+      port: lst-raster
+    to:
+      id: raster

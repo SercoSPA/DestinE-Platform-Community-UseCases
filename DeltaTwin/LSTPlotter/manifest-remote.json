@@ -1,0 +1,125 @@
+{
+  "name": "lst-plotter",
+  "description": "Land Surface Temperature (LST) component that downloads Landsat Collection 2 Level-2 data from HDA, computes Land Surface Temperature (LST), and exports a GeoTIFF plus a reference RGB/LST plot.",
+  "license": {
+    "name": "LGPLv3",
+    "url": "https://www.gnu.org/licenses/gpl-3.0.txt",
+    "description": "",
+    "copyrights": [
+      {
+        "years": [2026],
+        "company": "Serco"
+      }
+    ]
+  },
+  "owner": "Serco",
+
+  "inputs": {
+    "user": {
+      "type": "string",
+      "description": "DestinE Service Platform User Credentials."
+    },
+    "password": {
+      "type": "secret",
+      "description": "DestinE Service Platform Password Credentials."
+    },
+    "city_name": {
+      "type": "string",
+      "description": "City or region name used to select the NUTS3 area, e.g. 'Napoli' or 'Rome'."
+    },
+    "download_date": {
+      "type": "string",
+      "description": "End date for the Landsat image search in YYYY-MM-DD format."
+    }
+  },
+
+  "outputs": {
+    "lst-plot": {
+      "type": "Data",
+      "description": "PNG plot combining LST and RGB overview"
+    },
+    "lst-raster": {
+      "type": "Data",
+      "description": "LST raster as GeoTIFF"
+    }
+  },
+
+  "models": {
+    "lst_plotter": {
+      "path": "models/lst_plotter",
+      "type": "python",
+      "parameters": {
+        "pythonVersion": "3.11",
+        "aptRequirements": [
+          {
+            "name": "libexpat1"
+          },
+          {
+            "name": "libexpat1-dev"
+          }
+        ],
+        "pipRequirements": [
+          {
+            "name": "destinepyauth",
+            "version": "1.3.0"
+          },
+          {
+            "name": "geopandas"
+          },
+          {
+            "name": "matplotlib"
+          },
+          {
+            "name": "numpy"
+          },
+          {
+            "name": "pandas"
+          },
+          {
+            "name": "requests"
+          },
+          {
+            "name": "rioxarray"
+          },
+          {
+            "name": "tqdm"
+          },
+          {
+            "name": "xarray"
+          }
+        ],
+        "hardwareRequirements": {
+          "cpu": "8000m",
+          "ram": "16Gi"
+        },
+        "command": "python lst_plotter.py $(inputs.user) $(inputs.password) $(inputs.city_name) $(inputs.download_date)"
+      },
+      "inputs": {
+        "user": {
+          "type": "string"
+        },
+        "password": {
+          "type": "secret"
+        },
+        "city_name": {
+          "type": "string"
+        },
+        "download_date": {
+          "type": "string"
+        }
+      },
+      "outputs": {
+        "lst-plot": {
+          "type": "Data",
+          "glob": "lst_plot.png"
+        },
+        "lst-raster": {
+          "type": "Data",
+          "glob": "lst.tif"
+        }
+      }
+    }
+  },
+
+  "dependencies": {}
+}
