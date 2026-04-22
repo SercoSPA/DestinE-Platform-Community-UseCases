@@ -26,7 +26,7 @@ log.setLevel(logging.INFO)
 
 
 def _load_country_records() -> list:
-    shpfilename = shpreader.natural_earth(resolution="110m", category="cultural", name="admin_0_countries")
+    shpfilename = shpreader.natural_earth(resolution="50m", category="cultural", name="admin_0_countries")
     return list(shpreader.Reader(shpfilename).records())
 
 
@@ -371,7 +371,7 @@ def plot_fire_monitor(
             cbar2.ax.set_yticklabels(meanings, fontsize=9)
             cbar2.outline.set_edgecolor(_SPINE_COLOR)
             gpd.GeoSeries([country_geom], crs="EPSG:4326").plot(
-                ax=ax, facecolor="none", edgecolor=_BRAND_PINK, linewidth=1.5, aspect=None,
+                ax=ax, facecolor="none", edgecolor=_BRAND_PINK, linewidth=0.5, aspect=None,
             )
             ax.set_xlim(*zoom_xlim)
             ax.set_ylim(*zoom_ylim)
