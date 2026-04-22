@@ -7,9 +7,9 @@
     "type": "string",
     "value": "XXXXXX"
   },
-  "city_name": {
+  "country_name": {
     "type": "string",
-    "value": "Campania"
+    "value": "Spain"
   },
   "download_date": {
     "type": "string",

@@ -10,7 +10,6 @@ import requests
 from requests.exceptions import HTTPError
 from destinepyauth import get_token
 from tqdm import tqdm
-from nuts_helper import get_nuts2_geom
 
 HDA_STAC_ENDPOINT = "https://hda.data.destination-earth.eu/stac/v2"
 STAC_DT_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
@@ -29,7 +28,7 @@ def search_products(
     datetime_range: str | None = None,
     limit: int = 10,
     endpoint: str = HDA_STAC_ENDPOINT,
-    nuts2_code: Optional[str] = None,
+    country_geom=None,
 ) -> list[dict[str, Any]]:
     """Search STAC products by collection and datetime range."""
     intersects_bounds: Optional[tuple[float, float, float, float]] = None
@@ -39,11 +38,10 @@ def search_products(
     }
     if datetime_range is not None:
         payload["datetime"] = datetime_range
-    if nuts2_code is not None:
-        geom = get_nuts2_geom(nuts2_code)
-        payload["intersects"] = geom.__geo_interface__
-        intersects_bounds = geom.bounds
-        log.info(f"Filtering by NUTS2 region: {nuts2_code}")
+    if country_geom is not None:
+        payload["intersects"] = country_geom.__geo_interface__
+        intersects_bounds = country_geom.bounds
+        log.info(f"Filtering by geometry bounds: {intersects_bounds}")
 
     log.info(
         "Search request: collections=%s, limit=%s, datetime=%s, intersects=%s",

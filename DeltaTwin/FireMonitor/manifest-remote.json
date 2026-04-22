@@ -1,6 +1,6 @@
 {
   "name": "fire-monitor",
-  "description": "Active Fire Monitor component that downloads MTG FCI Active Fire Level-2 products from HDA and generates a fire probability and classification plot for a selected NUTS2 region.",
+  "description": "Active Fire Monitor component that downloads MTG FCI Active Fire Level-2 products from HDA and generates a fire probability and classification plot for a selected country.",
   "license": {
     "name": "LGPLv3",
     "url": "https://www.gnu.org/licenses/gpl-3.0.txt",
@@ -23,9 +23,9 @@
       "type": "secret",
       "description": "DestinE Service Platform Password Credentials."
     },
-    "city_name": {
+    "country_name": {
       "type": "string",
-      "description": "City or region name used to select the NUTS2 area, e.g. 'Campania' or 'Andalucía'."
+      "description": "Country name to monitor, e.g. 'Spain' or 'Italy'."
     },
     "download_date": {
       "type": "string",
@@ -36,7 +36,7 @@
   "outputs": {
     "fire-monitor-plot": {
       "type": "Data",
-      "description": "PNG plot showing Fire Probability and Active Fire Classification for the NUTS2 region."
+      "description": "PNG plot showing Fire Probability and Active Fire Classification for the selected country."
     }
   },
 
@@ -85,7 +85,7 @@
           "cpu": "4000m",
           "ram": "8Gi"
         },
-        "command": "python fire_monitor.py $(inputs.user) $(inputs.password) $(inputs.city_name) $(inputs.download_date)"
+        "command": "python fire_monitor.py $(inputs.user) $(inputs.password) $(inputs.country_name) $(inputs.download_date)"
       },
       "inputs": {
         "user": {
@@ -94,7 +94,7 @@
         "password": {
           "type": "secret"
         },
-        "city_name": {
+        "country_name": {
           "type": "string"
         },
         "download_date": {

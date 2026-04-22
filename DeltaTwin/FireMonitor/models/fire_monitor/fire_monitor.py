@@ -1,26 +1,79 @@
 from __future__ import annotations
 
+import difflib
 import os
 import sys
 import logging
-import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
+import cartopy.io.shapereader as shpreader
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import matplotlib.colors as mcolors
 import numpy as np
+import pyproj
+from shapely.ops import unary_union
 import xarray as xr
 
-from hda_helper import search_products, download_first_asset, download_single_asset, get_auth_headers
-from nuts_helper import find_nuts2_by_name, get_nuts2_geom
+from hda_helper import search_products, download_single_asset, get_auth_headers
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
+
+
+def _load_country_records() -> list:
+    shpfilename = shpreader.natural_earth(resolution="10m", category="cultural", name="admin_0_countries")
+    return list(shpreader.Reader(shpfilename).records())
+
+
+_NAME_ATTRS = ["NAME_LONG", "NAME", "ADMIN", "SOVEREIGNT"]
+
+
+def find_country_by_name(name: str) -> tuple[str, str]:
+    """Find the best-matching country name using cartopy's Natural Earth data."""
+    records = _load_country_records()
+    name_lower = name.lower()
+
+    # Build a mapping: lowercase → display name (first non-empty NAME_LONG or NAME)
+    name_map: dict[str, str] = {}
+    for rec in records:
+        for attr in _NAME_ATTRS:
+            val = rec.attributes.get(attr, "")
+            if val:
+                name_map[val.lower()] = val
+
+    # Exact match
+    if name_lower in name_map:
+        display = name_map[name_lower]
+        log.info(f"Matched country: {display}")
+        return display, display
+
+    # Fuzzy fallback
+    close = difflib.get_close_matches(name_lower, name_map.keys(), n=1, cutoff=0.5)
+    if close:
+        display = name_map[close[0]]
+        log.info(f"Matched country (fuzzy): {display}")
+        return display, display
+
+    raise ValueError(f"Country '{name}' not found in Natural Earth dataset.")
+
+
+def get_country_geom(country_name: str):
+    """Return merged geometry for a country using cartopy's Natural Earth data."""
+    records = _load_country_records()
+    name_lower = country_name.lower()
+    geoms = [
+        rec.geometry
+        for rec in records
+        if any(str(rec.attributes.get(attr, "")).lower() == name_lower for attr in _NAME_ATTRS)
+    ]
+    if not geoms:
+        raise ValueError(f"Country '{country_name}' not found in Natural Earth dataset.")
+    return unary_union(geoms)
 
 
 def _sensing_time_str(ds: xr.Dataset, fallback_name: str) -> str:
@@ -48,7 +101,6 @@ def _compute_lat_lon_from_projection(ds: xr.Dataset) -> tuple[np.ndarray, np.nda
     lons, lats : np.ndarray
         2-D arrays with shape (nrows, ncols).
     """
-    import pyproj
 
     # Locate the grid_mapping variable
     gm_attrs: Optional[dict] = None
@@ -104,34 +156,26 @@ def _compute_lat_lon_from_projection(ds: xr.Dataset) -> tuple[np.ndarray, np.nda
 
 def _load_fire_data(
     nc_path: Path,
-    nuts2_code: str,
+    country_name: str,
 ) -> tuple[np.ndarray, np.ndarray, Optional[np.ndarray], Optional[np.ndarray], dict, str]:
-    """Open a FCI FIR netCDF and extract fire variables, clipped to a NUTS2 bounding box.
-
-    Handles both:
-    * **2-D gridded** products (full-disk geostationary grid) — uses
-      :func:`_compute_lat_lon_from_projection`.
-    * **1-D point-list** products (one row per detected fire pixel) — reads
-      ``latitude`` / ``longitude`` coordinate variables directly.
+    """Open a FCI FIR netCDF and extract fire variables, clipped to a country bounding box.
 
     Returns
     -------
     lons, lats : np.ndarray
-        Coordinate arrays (2-D for gridded, 1-D for point-list).
+        2-D coordinate arrays.
     fire_prob : np.ndarray or None
-        Fire probability values (matching shape).
+        Fire probability values (0–1 float, NaN for off-disk).
     fire_result : np.ndarray or None
-        Fire classification values (matching shape).
+        Fire classification values (float, NaN for off-disk).
     flag_info : dict
-        ``{"values": [...], "meanings": [...]}`` read from variable attributes,
-        or an empty dict if attributes are absent.
+        ``{"values": [...], "meanings": [...]}`` or empty dict.
     sensing_time : str
         Human-readable sensing time string.
     """
     ds = xr.open_dataset(nc_path, decode_cf=True, mask_and_scale=True)
     sensing_time = _sensing_time_str(ds, nc_path.stem)
 
-    # --- Detect data layout ---
     fire_prob_var = ds.get("fire_probability")
     fire_result_var = ds.get("fire_result")
 
@@ -142,32 +186,12 @@ def _load_fire_data(
             f"Available variables: {available}"
         )
 
-    ref_var = fire_prob_var if fire_prob_var is not None else fire_result_var
-    is_point_list = ref_var.ndim == 1
+    lons, lats = _compute_lat_lon_from_projection(ds)
+    lons = -lons
 
-    # --- Build lat/lon arrays ---
-    if is_point_list:
-        # 1-D list of fire detections; lat/lon are stored as coordinate variables
-        if "latitude" not in ds and "longitude" not in ds:
-            raise ValueError(
-                "1-D fire point list expected but no 'latitude'/'longitude' variables found."
-            )
-        lats = ds["latitude"].values.astype(float)
-        lons = ds["longitude"].values.astype(float)
-    else:
-        # 2-D geostationary grid
-        if "latitude" in ds and "longitude" in ds:
-            lats = ds["latitude"].values.astype(float)
-            lons = ds["longitude"].values.astype(float)
-        else:
-            lons, lats = _compute_lat_lon_from_projection(ds)
-
-
-    # --- Extract fire variables ---
+    # Extract fire variables; fire_result value 4 is the off-disk fill (no _FillValue attr),
+    # so mask it using the NaN positions from fire_probability.
     fire_prob = fire_prob_var.values.squeeze().astype(float) if fire_prob_var is not None else None
-    # fire_result is stored as int8 with no _FillValue attribute; off-disk pixels are
-    # set to value 4 in the raw file (same pixels where fire_probability == fill).
-    # Convert to float so we can use NaN for off-disk / fill positions.
     if fire_result_var is not None:
         fire_result_raw = fire_result_var.values.squeeze().astype(float)
         if fire_prob is not None:
@@ -175,7 +199,6 @@ def _load_fire_data(
     else:
         fire_result_raw = None
 
-    # Collect flag enum information if available
     flag_info: dict = {}
     if fire_result_var is not None:
         fv = fire_result_var.attrs.get("flag_values")
@@ -190,9 +213,9 @@ def _load_fire_data(
 
     ds.close()
 
-    # --- Crop to NUTS2 bounding box ---
-    nuts2_geom = get_nuts2_geom(nuts2_code)
-    minx, miny, maxx, maxy = nuts2_geom.bounds
+    # Crop to country bounding box (rectangular sub-grid to keep arrays 2-D)
+    country_geom = get_country_geom(country_name)
+    minx, miny, maxx, maxy = country_geom.bounds
     pad_x = (maxx - minx) * 0.05
     pad_y = (maxy - miny) * 0.05
 
@@ -202,28 +225,19 @@ def _load_fire_data(
             & (lats >= miny - pad_y) & (lats <= maxy + pad_y)
         )
 
-    if is_point_list:
-        lons = lons[in_bbox]
-        lats = lats[in_bbox]
+    row_indices = np.where(in_bbox.any(axis=1))[0]
+    col_indices = np.where(in_bbox.any(axis=0))[0]
+    if row_indices.size > 0 and col_indices.size > 0:
+        r0, r1 = int(row_indices[0]), int(row_indices[-1]) + 1
+        c0, c1 = int(col_indices[0]), int(col_indices[-1]) + 1
+        lons = lons[r0:r1, c0:c1]
+        lats = lats[r0:r1, c0:c1]
         if fire_prob is not None:
-            fire_prob = fire_prob[in_bbox]
+            fire_prob = fire_prob[r0:r1, c0:c1]
         if fire_result_raw is not None:
-            fire_result_raw = fire_result_raw[in_bbox]
-    else:
-        # Crop 2-D arrays to the smallest rectangle containing the NUTS2 bbox.
-        row_indices = np.where(in_bbox.any(axis=1))[0]
-        col_indices = np.where(in_bbox.any(axis=0))[0]
-        if row_indices.size > 0 and col_indices.size > 0:
-            r0, r1 = int(row_indices[0]), int(row_indices[-1]) + 1
-            c0, c1 = int(col_indices[0]), int(col_indices[-1]) + 1
-            lons = lons[r0:r1, c0:c1]
-            lats = lats[r0:r1, c0:c1]
-            if fire_prob is not None:
-                fire_prob = fire_prob[r0:r1, c0:c1]
-            if fire_result_raw is not None:
-                fire_result_raw = fire_result_raw[r0:r1, c0:c1]
+            fire_result_raw = fire_result_raw[r0:r1, c0:c1]
 
-    return lons, lats, fire_prob, fire_result_raw, flag_info, sensing_time, is_point_list
+    return lons, lats, fire_prob, fire_result_raw, flag_info, sensing_time
 
 
 def _build_fire_result_colormap(flag_info: dict) -> tuple[mcolors.Colormap, mcolors.Normalize, list[str]]:
@@ -257,36 +271,30 @@ def plot_fire_monitor(
     lats: np.ndarray,
     fire_prob: Optional[np.ndarray],
     fire_result: Optional[np.ndarray],
-    is_point_list: bool,
-    nuts2_geom,
+    country_geom,
     png_path: str,
-    nuts2_region_name: str,
-    nuts2_code: str,
+    country_name: str,
     flag_info: dict,
     sensing_time: str = "",
 ) -> None:
-    """Plot Fire Probability and Active Fire Classification for a NUTS2 region.
+    """Plot Fire Probability and Active Fire Classification for a country.
 
     Parameters
     ----------
     lons, lats : np.ndarray
-        Coordinate arrays (2-D for gridded data, 1-D for point lists).
+        2-D coordinate arrays.
     fire_prob : np.ndarray or None
-        Fire probability values (% or fraction).
+        Fire probability values (fraction or %).
     fire_result : np.ndarray or None
         Fire classification values.
-    is_point_list : bool
-        True when data comes as a 1-D list of detected fire locations.
-    nuts2_geom : shapely geometry
-        NUTS2 region polygon for overlay and zoom extents.
+    country_geom : shapely geometry
+        Country polygon for overlay and zoom extents.
     png_path : str
         Output PNG file path.
-    nuts2_region_name : str
-        Human-readable region name used in the plot title.
-    nuts2_code : str
-        NUTS2 code used in the plot title.
+    country_name : str
+        Country name used in the plot title.
     flag_info : dict
-        Fire classification flag metadata (from ``_build_fire_result_colormap``).
+        Fire classification flag metadata.
     sensing_time : str
         Acquisition datetime shown in the figure title.
     """
@@ -295,13 +303,13 @@ def plot_fire_monitor(
     _BG           = "#F8F8F8"
     _SPINE_COLOR  = "#cccccc"
 
-    minx, miny, maxx, maxy = nuts2_geom.bounds
+    minx, miny, maxx, maxy = country_geom.bounds
     pad_x = (maxx - minx) * 0.05
     pad_y = (maxy - miny) * 0.05
     zoom_xlim = (minx - pad_x, maxx + pad_x)
     zoom_ylim = (miny - pad_y, maxy + pad_y)
 
-    title = f"NUTS2 region: {nuts2_region_name} ({nuts2_code})"
+    title = f"Country: {country_name}"
     if sensing_time:
         title += f", at {sensing_time}"
 
@@ -336,20 +344,11 @@ def plot_fire_monitor(
             if np.nanmax(prob_display) <= 1.0:
                 prob_display = prob_display * 100.0
 
-            if is_point_list:
-                sc = ax.scatter(
-                    lons, lats,
-                    c=prob_display,
-                    cmap="YlOrRd", vmin=0, vmax=100,
-                    s=6, linewidths=0,
-                )
-                cbar = fig.colorbar(sc, ax=ax, fraction=0.046, pad=0.04, label="Fire Probability (%)")
-            else:
-                im = ax.pcolormesh(lons, lats, prob_display, cmap="YlOrRd", vmin=0, vmax=100)
-                cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label="Fire Probability (%)")
+            im = ax.pcolormesh(lons, lats, prob_display, cmap="YlOrRd", vmin=0, vmax=100)
+            cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
 
             cbar.outline.set_edgecolor(_SPINE_COLOR)
-            gpd.GeoSeries([nuts2_geom], crs="EPSG:4326").plot(
+            gpd.GeoSeries([country_geom], crs="EPSG:4326").plot(
                 ax=ax, facecolor="none", edgecolor=_BRAND_PINK, linewidth=1.5, aspect=None,
             )
             ax.set_xlim(*zoom_xlim)
@@ -366,29 +365,16 @@ def plot_fire_monitor(
             ax = axes[ax_idx]
             cmap, norm, meanings = _build_fire_result_colormap(flag_info)
 
-            if is_point_list:
-                sc = ax.scatter(
-                    lons, lats,
-                    c=fire_result.astype(float),
-                    cmap=cmap, norm=norm,
-                    s=6, linewidths=0,
-                )
-                cbar2 = fig.colorbar(
-                    sc, ax=ax, fraction=0.046, pad=0.04,
-                    ticks=list(range(len(meanings))),
-                    label="Fire Classification",
-                )
-            else:
-                im2 = ax.pcolormesh(lons, lats, fire_result.astype(float), cmap=cmap, norm=norm)
-                cbar2 = fig.colorbar(
-                    im2, ax=ax, fraction=0.046, pad=0.04,
-                    ticks=list(range(len(meanings))),
-                    label="Fire Classification",
-                )
+            im2 = ax.pcolormesh(lons, lats, fire_result.astype(float), cmap=cmap, norm=norm)
+            cbar2 = fig.colorbar(
+                im2, ax=ax, fraction=0.046, pad=0.04,
+                ticks=list(range(len(meanings))),
+                # label="Fire Classification",
+            )
 
             cbar2.ax.set_yticklabels(meanings, fontsize=9)
             cbar2.outline.set_edgecolor(_SPINE_COLOR)
-            gpd.GeoSeries([nuts2_geom], crs="EPSG:4326").plot(
+            gpd.GeoSeries([country_geom], crs="EPSG:4326").plot(
                 ax=ax, facecolor="none", edgecolor=_BRAND_PINK, linewidth=1.5, aspect=None,
             )
             ax.set_xlim(*zoom_xlim)
@@ -408,17 +394,17 @@ def plot_fire_monitor(
 def main(
     download_collection_id: str = "EO.EUM.DAT.MTG.FCI-ACTIVE_FIRE-L2-V1",
     download_date: str | None = "2025-08-16",
-    download_lookback_days: int = 2,
+    download_lookback_days: int = 1,
     download_out_path: str | Path = "./.delta",
     download_limit: int = 20,
-    city_name: str = "Galicia",
+    country_name: str = "Spain",
 ) -> int:
     """Download an MTG FCI Active Fire product and produce a fire monitoring plot.
 
     Searches the HDA STAC for the most recent product within the lookback
     window, downloads the zip archive, extracts the netCDF, and generates a
     side-by-side Fire Probability / Active Fire Classification plot for the
-    selected NUTS2 region.
+    selected country.
 
     Parameters
     ----------
@@ -433,11 +419,9 @@ def main(
         Destination directory where files are written.
     download_limit : int
         Maximum number of products requested from the STAC search endpoint.
-    city_name : str
-        Free-text city or region name used to look up the Eurostat NUTS2 region
-        for spatial masking, e.g. ``"Campania"`` or ``"Andalucía"``.
-        The best-matching region is resolved via
-        :func:`nuts_helper.find_nuts2_by_name`.
+    country_name : str
+        Country name used to select the spatial area, e.g. ``"Spain"`` or
+        ``"Italy"``. Resolved via :func:`find_country_by_name`.
 
     Returns
     -------
@@ -455,9 +439,9 @@ def main(
     )
     log.info(f"Searching for products between {start_dt.date()} and {end_dt.date()}")
 
-    if city_name is None:
-        raise ValueError("city_name must be provided to resolve a NUTS2 region.")
-    nuts2_code, region_name = find_nuts2_by_name(city_name)
+    if country_name is None:
+        raise ValueError("country_name must be provided.")
+    canonical_name, display_name = find_country_by_name(country_name)
 
     out_path = Path(download_out_path)
 
@@ -474,7 +458,7 @@ def main(
             auth_headers=auth_headers,
             datetime_range=download_datetime_range,
             limit=download_limit,
-            nuts2_code=nuts2_code,
+            country_geom=get_country_geom(canonical_name),
         )
         if not features:
             raise ValueError("No products found for the given criteria.")
@@ -489,8 +473,8 @@ def main(
     log.info(f"Processing netCDF: {nc_path}")
 
     try:
-        lons, lats, fire_prob, fire_result, flag_info, sensing_time, is_point_list = (
-            _load_fire_data(nc_path, nuts2_code)
+        lons, lats, fire_prob, fire_result, flag_info, sensing_time = (
+            _load_fire_data(nc_path, canonical_name)
         )
 
         plot_path = Path("fire_monitor_plot.png")
@@ -499,11 +483,9 @@ def main(
             lats=lats,
             fire_prob=fire_prob,
             fire_result=fire_result,
-            is_point_list=is_point_list,
-            nuts2_geom=get_nuts2_geom(nuts2_code),
+            country_geom=get_country_geom(canonical_name),
             png_path=str(plot_path),
-            nuts2_region_name=region_name,
-            nuts2_code=nuts2_code,
+            country_name=display_name,
             flag_info=flag_info,
             sensing_time=sensing_time,
         )
@@ -530,7 +512,7 @@ if __name__ == "__main__":
 
     kwargs: dict = {}
     if len(sys.argv) >= 4:
-        kwargs["city_name"] = sys.argv[3]
+        kwargs["country_name"] = sys.argv[3]
     if len(sys.argv) >= 5:
         kwargs["download_date"] = sys.argv[4]
 
