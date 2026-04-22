@@ -26,7 +26,7 @@ log.setLevel(logging.INFO)
 
 
 def _load_country_records() -> list:
-    shpfilename = shpreader.natural_earth(resolution="10m", category="cultural", name="admin_0_countries")
+    shpfilename = shpreader.natural_earth(resolution="110m", category="cultural", name="admin_0_countries")
     return list(shpreader.Reader(shpfilename).records())
 
 
@@ -313,27 +313,22 @@ def plot_fire_monitor(
     if sensing_time:
         title += f", at {sensing_time}"
 
-    n_panels = sum([fire_prob is not None, fire_result is not None])
-    if n_panels == 0:
-        log.warning("No fire data available to plot; skipping.")
-        return
-
     with plt.rc_context({
         "font.size": 13,
         "axes.facecolor": _BG,
         "figure.facecolor": _SPINE_COLOR,
     }):
         fig, axes = plt.subplots(
-            1, n_panels,
-            figsize=(10 if n_panels == 2 else 6, 4.5),
+            1, 1,
+            figsize=(8, 6),
             constrained_layout=True,
         )
-        if n_panels == 1:
-            axes = [axes]
+        axes = [axes]
         fig.suptitle(title, fontsize=15)
 
         ax_idx = 0
 
+        """
         # --- Fire Probability panel ---
         if fire_prob is not None:
             ax = axes[ax_idx]
@@ -359,6 +354,7 @@ def plot_fire_monitor(
             ax.xaxis.set_major_locator(mticker.MaxNLocator(5))
             ax.tick_params(axis="x", rotation=45)
             ax.grid(True, color="grey", linewidth=0.5, alpha=0.6, zorder=0)
+        """
 
         # --- Fire Classification panel ---
         if fire_result is not None:
