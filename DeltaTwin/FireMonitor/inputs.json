@@ -1,0 +1,18 @@
+{
+  "user": {
+    "type": "string",
+    "value": "johnsmith"
+  },
+  "password": {
+    "type": "string",
+    "value": "XXXXXX"
+  },
+  "city_name": {
+    "type": "string",
+    "value": "Campania"
+  },
+  "download_date": {
+    "type": "string",
+    "value": "2026-04-21"
+  }
+}
