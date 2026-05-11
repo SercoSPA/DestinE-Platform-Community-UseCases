@@ -273,7 +273,7 @@ def plot_fire_monitor(
         Fractional padding used to expand the NUTS2 plotting extent.
         ``0`` uses the exact region bounds; larger values zoom out.
     """
-    _BRAND_PINK   = "#ef2b89"
+    # _BRAND_PINK   = "#ef2b89"
     _BRAND_PURPLE = "#7B34DB"
     _BG           = "#F8F8F8"
     _SPINE_COLOR  = "#cccccc"
@@ -308,37 +308,36 @@ def plot_fire_monitor(
         # --- Fire Classification panel ---
         if fire_result is not None:
             ax = axes[ax_idx]
-            cmap, norm, meanings = _build_fire_result_colormap()
 
+            borders, coastlines = _load_global_map_layers()
+            borders.boundary.plot(
+                ax=ax,
+                color="black",
+                linewidth=1,
+            )
+            coastlines.plot(
+                ax=ax,
+                color="black",
+                linewidth=1,
+            )
+            # gpd.GeoSeries([nuts2_geom], crs="EPSG:4326").plot(
+            #     ax=ax,
+            #     facecolor="none",
+            #     edgecolor=_SPINE_COLOR,
+            #     linewidth=2,
+            #     aspect=None,
+            # )
+
+            cmap, norm, meanings = _build_fire_result_colormap()
             im2 = ax.pcolormesh(lons, lats, fire_result.astype(float), cmap=cmap, norm=norm)
             cbar2 = fig.colorbar(
                 im2, ax=ax, fraction=0.046, pad=0.04,
                 ticks=list(range(len(meanings))),
                 # label="Fire Classification",
             )
-
             cbar2.ax.set_yticklabels(meanings, fontsize=9)
-            cbar2.outline.set_edgecolor(_SPINE_COLOR)
-            borders, coastlines = _load_global_map_layers()
-            borders.boundary.plot(
-                ax=ax,
-                color="black",
-                linewidth=0.4,
-                alpha=0.8,
-            )
-            coastlines.plot(
-                ax=ax,
-                color="black",
-                linewidth=0.6,
-                alpha=0.9,
-            )
-            gpd.GeoSeries([nuts2_geom], crs="EPSG:4326").plot(
-                ax=ax,
-                facecolor="none",
-                edgecolor=_BRAND_PINK,
-                linewidth=1.5,
-                aspect=None,
-            )
+            # cbar2.outline.set_edgecolor(_SPINE_COLOR)
+
             ax.set_xlim(*zoom_xlim)
             ax.set_ylim(*zoom_ylim)
             ax.set_xlabel("Longitude")
