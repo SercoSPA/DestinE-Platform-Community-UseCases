@@ -155,8 +155,6 @@ def _load_fire_data(
         2-D coordinate arrays.
     fire_result : np.ndarray or None
         Fire classification values (float, NaN for off-disk).
-    flag_info : dict
-        ``{"values": [...], "meanings": [...]}`` or empty dict.
     sensing_time : str
         Human-readable sensing time string.
     """
@@ -175,27 +173,10 @@ def _load_fire_data(
     lons, lats = _compute_lat_lon_from_projection(ds)
     lons = -lons
 
-    # Extract fire variables; fire_result value 4 is the off-disk fill (no _FillValue attr),
-    # so mask it using the NaN positions from fire_probability.
-    fire_prob = fire_prob_var.values.squeeze().astype(float) if fire_prob_var is not None else None
-    if fire_result_var is not None:
-        fire_result_raw = fire_result_var.values.squeeze().astype(float)
-        if fire_prob is not None:
-            fire_result_raw[np.isnan(fire_prob)] = np.nan
-    else:
-        fire_result_raw = None
+    # Extract fire classification and mask invalid/fill pixels without relying on fire_probability.
+    fire_result_raw = fire_result_var.values.squeeze().astype(float)
 
-    flag_info: dict = {}
-    if fire_result_var is not None:
-        fv = fire_result_var.attrs.get("flag_values")
-        fm = fire_result_var.attrs.get("flag_meanings")
-        if fv is not None and fm is not None:
-            try:
-                values = list(np.atleast_1d(fv))
-                meanings = str(fm).split() if isinstance(fm, str) else list(fm)
-                flag_info = {"values": values, "meanings": meanings}
-            except Exception:
-                pass
+    fire_result_raw[(fire_result_raw < 0) | (fire_result_raw > 3)] = np.nan
 
     ds.close()
 
@@ -220,23 +201,17 @@ def _load_fire_data(
         if fire_result_raw is not None:
             fire_result_raw = fire_result_raw[r0:r1, c0:c1]
 
-    return lons, lats, fire_result_raw, flag_info, sensing_time
+    return lons, lats, fire_result_raw, sensing_time
 
 
-def _build_fire_result_colormap(flag_info: dict) -> tuple[mcolors.Colormap, mcolors.Normalize, list[str]]:
+def _build_fire_result_colormap() -> tuple[mcolors.Colormap, mcolors.Normalize, list[str]]:
     """Build a discrete colormap for fire classification values.
-
-    Falls back to a sensible default if no flag information is available.
     """
-    if flag_info:
-        values = [int(v) for v in flag_info["values"]]
-        meanings = flag_info["meanings"]
-    else:
-        # EUMETSAT FCI Active Fire L2 classification:
-        # 0 = No fire / not processed, 1 = Possible fire, 2 = Probable fire, 3 = Active fire
-        # (value 4 is the off-disk fill and is masked to NaN before this point)
-        values = [0, 1, 2, 3]
-        meanings = ["No fire", "Possible fire", "Probable fire", "Active fire"]
+    # EUMETSAT FCI Active Fire L2 classification:
+    # 0 = No fire / not processed, 1 = Possible fire, 2 = Probable fire, 3 = Active fire
+    # (value 4 is the off-disk fill and is masked to NaN before this point)
+    values = [0, 1, 2, 3]
+    meanings = ["No fire", "Possible fire", "Probable fire", "Active fire"]
 
     n = len(values)
     # Colour ramp: grey → yellow → orange → red, roughly
@@ -275,7 +250,6 @@ def plot_fire_monitor(
     nuts2_geom,
     png_path: str,
     nuts2_region_name: str,
-    flag_info: dict,
     sensing_time: str = "",
     pad_ratio: float = 0.5,
 ) -> None:
@@ -293,8 +267,6 @@ def plot_fire_monitor(
         Output PNG file path.
     nuts2_region_name : str
         NUTS2 region name used in the plot title.
-    flag_info : dict
-        Fire classification flag metadata.
     sensing_time : str
         Acquisition datetime shown in the figure title.
     pad_ratio : float
@@ -336,7 +308,7 @@ def plot_fire_monitor(
         # --- Fire Classification panel ---
         if fire_result is not None:
             ax = axes[ax_idx]
-            cmap, norm, meanings = _build_fire_result_colormap(flag_info)
+            cmap, norm, meanings = _build_fire_result_colormap()
 
             im2 = ax.pcolormesh(lons, lats, fire_result.astype(float), cmap=cmap, norm=norm)
             cbar2 = fig.colorbar(
@@ -468,7 +440,7 @@ def main(
     log.info(f"Processing netCDF: {nc_path}")
 
     try:
-        lons, lats, fire_result, flag_info, sensing_time = (
+        lons, lats, fire_result, sensing_time = (
             _load_fire_data(nc_path, region_geom, pad_ratio)
         )
 
@@ -480,7 +452,6 @@ def main(
             nuts2_geom=region_geom,
             png_path=str(plot_path),
             nuts2_region_name=display_name,
-            flag_info=flag_info,
             sensing_time=sensing_time,
             pad_ratio=pad_ratio,
         )
