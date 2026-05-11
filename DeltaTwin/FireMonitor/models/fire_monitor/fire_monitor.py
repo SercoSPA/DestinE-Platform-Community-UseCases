@@ -4,6 +4,7 @@ import difflib
 import os
 import sys
 import logging
+from functools import lru_cache
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
@@ -25,9 +26,37 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
 
+_BORDER_RESOLUTION = "10m"
+
+
 def _load_country_records() -> list:
-    shpfilename = shpreader.natural_earth(resolution="50m", category="cultural", name="admin_0_countries")
+    # Natural Earth "110m/50m/10m" labels are map-scale datasets (1:110M, 1:50M, 1:10M),
+    # not metre-level geometry resolution.
+    shpfilename = shpreader.natural_earth(
+        resolution=_BORDER_RESOLUTION,
+        category="cultural",
+        name="admin_0_countries",
+    )
     return list(shpreader.Reader(shpfilename).records())
+
+
+@lru_cache(maxsize=1)
+def _load_global_map_layers() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+    """Load global political borders and coastlines for map overlays."""
+    countries_path = shpreader.natural_earth(
+        resolution=_BORDER_RESOLUTION,
+        category="cultural",
+        name="admin_0_countries",
+    )
+    coastlines_path = shpreader.natural_earth(
+        resolution=_BORDER_RESOLUTION,
+        category="physical",
+        name="coastline",
+    )
+
+    borders = gpd.read_file(countries_path)
+    coastlines = gpd.read_file(coastlines_path)
+    return borders, coastlines
 
 
 _NAME_ATTRS = ["NAME_LONG", "NAME", "ADMIN", "SOVEREIGNT"]
@@ -266,6 +295,25 @@ def _build_fire_result_colormap(flag_info: dict) -> tuple[mcolors.Colormap, mcol
     return cmap, norm, meanings
 
 
+def _zoom_geometry(country_geom):
+    """Return the largest polygonal component for tighter country zoom."""
+    if country_geom.geom_type == "Polygon":
+        return country_geom
+
+    if hasattr(country_geom, "geoms"):
+        polygons = []
+        for geom in country_geom.geoms:
+            if geom.geom_type == "Polygon":
+                polygons.append(geom)
+            elif geom.geom_type == "MultiPolygon":
+                polygons.extend(list(geom.geoms))
+
+        if polygons:
+            return max(polygons, key=lambda p: p.area)
+
+    return country_geom
+
+
 def plot_fire_monitor(
     lons: np.ndarray,
     lats: np.ndarray,
@@ -303,7 +351,8 @@ def plot_fire_monitor(
     _BG           = "#F8F8F8"
     _SPINE_COLOR  = "#cccccc"
 
-    minx, miny, maxx, maxy = country_geom.bounds
+    zoom_geom = _zoom_geometry(country_geom)
+    minx, miny, maxx, maxy = zoom_geom.bounds
     pad_x = (maxx - minx) * 0.05
     pad_y = (maxy - miny) * 0.05
     zoom_xlim = (minx - pad_x, maxx + pad_x)
@@ -370,8 +419,18 @@ def plot_fire_monitor(
 
             cbar2.ax.set_yticklabels(meanings, fontsize=9)
             cbar2.outline.set_edgecolor(_SPINE_COLOR)
-            gpd.GeoSeries([country_geom], crs="EPSG:4326").plot(
-                ax=ax, facecolor="none", edgecolor=_BRAND_PINK, linewidth=0.5, aspect=None,
+            borders, coastlines = _load_global_map_layers()
+            borders.boundary.plot(
+                ax=ax,
+                color="black",
+                linewidth=0.4,
+                alpha=0.8,
+            )
+            coastlines.plot(
+                ax=ax,
+                color="black",
+                linewidth=0.6,
+                alpha=0.9,
             )
             ax.set_xlim(*zoom_xlim)
             ax.set_ylim(*zoom_ylim)
@@ -393,7 +452,7 @@ def main(
     download_lookback_days: int = 1,
     download_out_path: str | Path = "./.delta",
     download_limit: int = 20,
-    country_name: str = "Spain",
+    country_name: str = "Nigeria",
 ) -> int:
     """Download an MTG FCI Active Fire product and produce a fire monitoring plot.
 
