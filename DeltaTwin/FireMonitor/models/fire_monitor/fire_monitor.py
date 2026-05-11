@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import difflib
 import os
 import sys
 import logging
@@ -16,28 +15,17 @@ import matplotlib.ticker as mticker
 import matplotlib.colors as mcolors
 import numpy as np
 import pyproj
-from shapely.ops import unary_union
 import xarray as xr
 
 from hda_helper import search_products, download_single_asset, get_auth_headers
+from nuts_helper import find_nuts2_by_name, get_nuts2_geom
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
 
-_BORDER_RESOLUTION = "10m"
-
-
-def _load_country_records() -> list:
-    # Natural Earth "110m/50m/10m" labels are map-scale datasets (1:110M, 1:50M, 1:10M),
-    # not metre-level geometry resolution.
-    shpfilename = shpreader.natural_earth(
-        resolution=_BORDER_RESOLUTION,
-        category="cultural",
-        name="admin_0_countries",
-    )
-    return list(shpreader.Reader(shpfilename).records())
+_BORDER_RESOLUTION = "50m"
 
 
 @lru_cache(maxsize=1)
@@ -57,52 +45,6 @@ def _load_global_map_layers() -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     borders = gpd.read_file(countries_path)
     coastlines = gpd.read_file(coastlines_path)
     return borders, coastlines
-
-
-_NAME_ATTRS = ["NAME_LONG", "NAME", "ADMIN", "SOVEREIGNT"]
-
-
-def find_country_by_name(name: str) -> tuple[str, str]:
-    """Find the best-matching country name using cartopy's Natural Earth data."""
-    records = _load_country_records()
-    name_lower = name.lower()
-
-    # Build a mapping: lowercase → display name (first non-empty NAME_LONG or NAME)
-    name_map: dict[str, str] = {}
-    for rec in records:
-        for attr in _NAME_ATTRS:
-            val = rec.attributes.get(attr, "")
-            if val:
-                name_map[val.lower()] = val
-
-    # Exact match
-    if name_lower in name_map:
-        display = name_map[name_lower]
-        log.info(f"Matched country: {display}")
-        return display, display
-
-    # Fuzzy fallback
-    close = difflib.get_close_matches(name_lower, name_map.keys(), n=1, cutoff=0.5)
-    if close:
-        display = name_map[close[0]]
-        log.info(f"Matched country (fuzzy): {display}")
-        return display, display
-
-    raise ValueError(f"Country '{name}' not found in Natural Earth dataset.")
-
-
-def get_country_geom(country_name: str):
-    """Return merged geometry for a country using cartopy's Natural Earth data."""
-    records = _load_country_records()
-    name_lower = country_name.lower()
-    geoms = [
-        rec.geometry
-        for rec in records
-        if any(str(rec.attributes.get(attr, "")).lower() == name_lower for attr in _NAME_ATTRS)
-    ]
-    if not geoms:
-        raise ValueError(f"Country '{country_name}' not found in Natural Earth dataset.")
-    return unary_union(geoms)
 
 
 def _sensing_time_str(ds: xr.Dataset, fallback_name: str) -> str:
@@ -185,9 +127,10 @@ def _compute_lat_lon_from_projection(ds: xr.Dataset) -> tuple[np.ndarray, np.nda
 
 def _load_fire_data(
     nc_path: Path,
-    country_name: str,
+    nuts2_geom,
+    pad_ratio: float = 0.5,
 ) -> tuple[np.ndarray, np.ndarray, Optional[np.ndarray], Optional[np.ndarray], dict, str]:
-    """Open a FCI FIR netCDF and extract fire variables, clipped to a country bounding box.
+    """Open a FCI FIR netCDF and extract fire variables, clipped to a NUTS2 bounding box.
 
     Returns
     -------
@@ -242,11 +185,10 @@ def _load_fire_data(
 
     ds.close()
 
-    # Crop to country bounding box (rectangular sub-grid to keep arrays 2-D)
-    country_geom = get_country_geom(country_name)
-    minx, miny, maxx, maxy = country_geom.bounds
-    pad_x = (maxx - minx) * 0.05
-    pad_y = (maxy - miny) * 0.05
+    # Crop to NUTS2 bounding box (rectangular sub-grid to keep arrays 2-D)
+    minx, miny, maxx, maxy = nuts2_geom.bounds
+    pad_x = (maxx - minx) * pad_ratio
+    pad_y = (maxy - miny) * pad_ratio
 
     with np.errstate(invalid="ignore"):
         in_bbox = (
@@ -319,13 +261,14 @@ def plot_fire_monitor(
     lats: np.ndarray,
     fire_prob: Optional[np.ndarray],
     fire_result: Optional[np.ndarray],
-    country_geom,
+    nuts2_geom,
     png_path: str,
-    country_name: str,
+    nuts2_region_name: str,
     flag_info: dict,
     sensing_time: str = "",
+    pad_ratio: float = 0.5,
 ) -> None:
-    """Plot Fire Probability and Active Fire Classification for a country.
+    """Plot Fire Probability and Active Fire Classification for a NUTS2 region.
 
     Parameters
     ----------
@@ -335,12 +278,12 @@ def plot_fire_monitor(
         Fire probability values (fraction or %).
     fire_result : np.ndarray or None
         Fire classification values.
-    country_geom : shapely geometry
-        Country polygon for overlay and zoom extents.
+    nuts2_geom : shapely geometry
+        NUTS2 polygon for overlay and zoom extents.
     png_path : str
         Output PNG file path.
-    country_name : str
-        Country name used in the plot title.
+    nuts2_region_name : str
+        NUTS2 region name used in the plot title.
     flag_info : dict
         Fire classification flag metadata.
     sensing_time : str
@@ -351,14 +294,15 @@ def plot_fire_monitor(
     _BG           = "#F8F8F8"
     _SPINE_COLOR  = "#cccccc"
 
-    zoom_geom = _zoom_geometry(country_geom)
+    zoom_geom = _zoom_geometry(nuts2_geom)
     minx, miny, maxx, maxy = zoom_geom.bounds
-    pad_x = (maxx - minx) * 0.05
-    pad_y = (maxy - miny) * 0.05
+    # Keep a wider context around NUTS2 regions.
+    pad_x = (maxx - minx) * pad_ratio
+    pad_y = (maxy - miny) * pad_ratio
     zoom_xlim = (minx - pad_x, maxx + pad_x)
     zoom_ylim = (miny - pad_y, maxy + pad_y)
 
-    title = f"Country: {country_name}"
+    title = f"NUTS2 region: {nuts2_region_name}"
     if sensing_time:
         title += f", at {sensing_time}"
 
@@ -376,34 +320,6 @@ def plot_fire_monitor(
         fig.suptitle(title, fontsize=15)
 
         ax_idx = 0
-
-        """
-        # --- Fire Probability panel ---
-        if fire_prob is not None:
-            ax = axes[ax_idx]
-            ax_idx += 1
-
-            # Normalise to percentage if values are in [0, 1]
-            prob_display = fire_prob.copy()
-            if np.nanmax(prob_display) <= 1.0:
-                prob_display = prob_display * 100.0
-
-            im = ax.pcolormesh(lons, lats, prob_display, cmap="YlOrRd", vmin=0, vmax=100)
-            cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-
-            cbar.outline.set_edgecolor(_SPINE_COLOR)
-            gpd.GeoSeries([country_geom], crs="EPSG:4326").plot(
-                ax=ax, facecolor="none", edgecolor=_BRAND_PINK, linewidth=1.5, aspect=None,
-            )
-            ax.set_xlim(*zoom_xlim)
-            ax.set_ylim(*zoom_ylim)
-            ax.set_xlabel("Longitude")
-            ax.set_ylabel("Latitude")
-            ax.set_title("Fire Probability", color=_BRAND_PURPLE)
-            ax.xaxis.set_major_locator(mticker.MaxNLocator(5))
-            ax.tick_params(axis="x", rotation=45)
-            ax.grid(True, color="grey", linewidth=0.5, alpha=0.6, zorder=0)
-        """
 
         # --- Fire Classification panel ---
         if fire_result is not None:
@@ -452,14 +368,15 @@ def main(
     download_lookback_days: int = 1,
     download_out_path: str | Path = "./.delta",
     download_limit: int = 20,
-    country_name: str = "Nigeria",
+    nuts2_region_name: str = "Galicia",
+    pad_ratio: float = 1,
 ) -> int:
     """Download an MTG FCI Active Fire product and produce a fire monitoring plot.
 
     Searches the HDA STAC for the most recent product within the lookback
     window, downloads the zip archive, extracts the netCDF, and generates a
     side-by-side Fire Probability / Active Fire Classification plot for the
-    selected country.
+    selected NUTS2 region.
 
     Parameters
     ----------
@@ -474,9 +391,9 @@ def main(
         Destination directory where files are written.
     download_limit : int
         Maximum number of products requested from the STAC search endpoint.
-    country_name : str
-        Country name used to select the spatial area, e.g. ``"Spain"`` or
-        ``"Italy"``. Resolved via :func:`find_country_by_name`.
+    nuts2_region_name : str
+        NUTS2 region name used to select the spatial area, e.g. ``"Galicia"``
+        or ``"Ile-de-France"``. Resolved via :func:`find_nuts2_by_name`.
 
     Returns
     -------
@@ -494,9 +411,10 @@ def main(
     )
     log.info(f"Searching for products between {start_dt.date()} and {end_dt.date()}")
 
-    if country_name is None:
-        raise ValueError("country_name must be provided.")
-    canonical_name, display_name = find_country_by_name(country_name)
+    if nuts2_region_name is None:
+        raise ValueError("nuts2_region_name must be provided.")
+    nuts2_code, display_name = find_nuts2_by_name(nuts2_region_name)
+    region_geom = get_nuts2_geom(nuts2_code)
 
     out_path = Path(download_out_path)
 
@@ -513,7 +431,7 @@ def main(
             auth_headers=auth_headers,
             datetime_range=download_datetime_range,
             limit=download_limit,
-            country_geom=get_country_geom(canonical_name),
+            country_geom=region_geom,
         )
         if not features:
             raise ValueError("No products found for the given criteria.")
@@ -529,7 +447,7 @@ def main(
 
     try:
         lons, lats, fire_prob, fire_result, flag_info, sensing_time = (
-            _load_fire_data(nc_path, canonical_name)
+            _load_fire_data(nc_path, region_geom, pad_ratio)
         )
 
         plot_path = Path("fire_monitor_plot.png")
@@ -538,11 +456,12 @@ def main(
             lats=lats,
             fire_prob=fire_prob,
             fire_result=fire_result,
-            country_geom=get_country_geom(canonical_name),
+            nuts2_geom=region_geom,
             png_path=str(plot_path),
-            country_name=display_name,
+            nuts2_region_name=display_name,
             flag_info=flag_info,
             sensing_time=sensing_time,
+            pad_ratio=pad_ratio,
         )
         log.info(f"Exported output plot: {plot_path}")
         return 0
@@ -558,7 +477,7 @@ if __name__ == "__main__":
     )
 
     if len(sys.argv) not in (1, 3, 4, 5):
-        log.error("Usage: python fire_monitor.py [<username> <password> [<city> [<date>]]]")
+        log.error("Usage: python fire_monitor.py [<username> <password> [<nuts2_region> [<date>]]]")
         sys.exit(1)
 
     if len(sys.argv) >= 3:
@@ -567,7 +486,7 @@ if __name__ == "__main__":
 
     kwargs: dict = {}
     if len(sys.argv) >= 4:
-        kwargs["country_name"] = sys.argv[3]
+        kwargs["nuts2_region_name"] = sys.argv[3]
     if len(sys.argv) >= 5:
         kwargs["download_date"] = sys.argv[4]
 
