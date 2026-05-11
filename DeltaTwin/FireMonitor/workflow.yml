@@ -5,8 +5,8 @@ nodes:
   - id: password
     ref: inputs.password
 
-  - id: country_name
-    ref: inputs.country_name
+  - id: nuts2_region_name
+    ref: inputs.nuts2_region_name
 
   - id: download_date
     ref: inputs.download_date
@@ -31,10 +31,10 @@ edges:
       port: password
 
   - from:
-      id: country_name
+      id: nuts2_region_name
     to:
       id: fire_monitor
-      port: country_name
+      port: nuts2_region_name
 
   - from:
       id: download_date

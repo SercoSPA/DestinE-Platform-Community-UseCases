@@ -7,9 +7,9 @@
     "type": "string",
     "value": "XXXXXX"
   },
-  "country_name": {
+  "nuts2_region_name": {
     "type": "string",
-    "value": "Spain"
+    "value": "Galicia"
   },
   "download_date": {
     "type": "string",
