@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
 
-_BORDER_RESOLUTION = "50m"
+_BORDER_RESOLUTION = "10m"
 
 
 @lru_cache(maxsize=1)
@@ -56,7 +56,11 @@ def _sensing_time_str(ds: xr.Dataset, fallback_name: str) -> str:
                 dt = datetime.fromisoformat(str(val).rstrip("Z"))
                 return dt.strftime("%Y-%m-%d %H:%M:%S")
             except ValueError:
-                return str(val)
+                try:
+                    dt = datetime.strptime(str(val), "%Y%m%d%H%M%S")
+                    return dt.strftime("%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    return str(val)
     return fallback_name
 
 
@@ -132,12 +136,23 @@ def _load_fire_data(
 ) -> tuple[np.ndarray, np.ndarray, Optional[np.ndarray], Optional[np.ndarray], dict, str]:
     """Open a FCI FIR netCDF and extract fire variables, clipped to a NUTS2 bounding box.
 
+    The input arrays are cropped to the NUTS2 bounds expanded by ``pad_ratio``
+    on each axis, where ``0`` means no expansion and ``1`` means one extra
+    region width/height added on each side.
+
+    Parameters
+    ----------
+    nc_path : Path
+        NetCDF file path.
+    nuts2_geom : shapely geometry
+        NUTS2 geometry used to compute the crop bounding box.
+    pad_ratio : float
+        Fractional padding applied to the NUTS2 bbox before cropping.
+
     Returns
     -------
     lons, lats : np.ndarray
         2-D coordinate arrays.
-    fire_prob : np.ndarray or None
-        Fire probability values (0–1 float, NaN for off-disk).
     fire_result : np.ndarray or None
         Fire classification values (float, NaN for off-disk).
     flag_info : dict
@@ -148,13 +163,12 @@ def _load_fire_data(
     ds = xr.open_dataset(nc_path, decode_cf=True, mask_and_scale=True)
     sensing_time = _sensing_time_str(ds, nc_path.stem)
 
-    fire_prob_var = ds.get("fire_probability")
     fire_result_var = ds.get("fire_result")
 
-    if fire_prob_var is None and fire_result_var is None:
+    if fire_result_var is None:
         available = list(ds.data_vars)
         raise ValueError(
-            f"Neither 'fire_probability' nor 'fire_result' found in {nc_path.name}. "
+            f"'fire_result' NOT found in {nc_path.name}. "
             f"Available variables: {available}"
         )
 
@@ -203,12 +217,10 @@ def _load_fire_data(
         c0, c1 = int(col_indices[0]), int(col_indices[-1]) + 1
         lons = lons[r0:r1, c0:c1]
         lats = lats[r0:r1, c0:c1]
-        if fire_prob is not None:
-            fire_prob = fire_prob[r0:r1, c0:c1]
         if fire_result_raw is not None:
             fire_result_raw = fire_result_raw[r0:r1, c0:c1]
 
-    return lons, lats, fire_prob, fire_result_raw, flag_info, sensing_time
+    return lons, lats, fire_result_raw, flag_info, sensing_time
 
 
 def _build_fire_result_colormap(flag_info: dict) -> tuple[mcolors.Colormap, mcolors.Normalize, list[str]]:
@@ -238,7 +250,7 @@ def _build_fire_result_colormap(flag_info: dict) -> tuple[mcolors.Colormap, mcol
 
 
 def _zoom_geometry(country_geom):
-    """Return the largest polygonal component for tighter country zoom."""
+    """Return the largest polygonal component for tighter regional zoom."""
     if country_geom.geom_type == "Polygon":
         return country_geom
 
@@ -259,7 +271,6 @@ def _zoom_geometry(country_geom):
 def plot_fire_monitor(
     lons: np.ndarray,
     lats: np.ndarray,
-    fire_prob: Optional[np.ndarray],
     fire_result: Optional[np.ndarray],
     nuts2_geom,
     png_path: str,
@@ -274,8 +285,6 @@ def plot_fire_monitor(
     ----------
     lons, lats : np.ndarray
         2-D coordinate arrays.
-    fire_prob : np.ndarray or None
-        Fire probability values (fraction or %).
     fire_result : np.ndarray or None
         Fire classification values.
     nuts2_geom : shapely geometry
@@ -288,6 +297,9 @@ def plot_fire_monitor(
         Fire classification flag metadata.
     sensing_time : str
         Acquisition datetime shown in the figure title.
+    pad_ratio : float
+        Fractional padding used to expand the NUTS2 plotting extent.
+        ``0`` uses the exact region bounds; larger values zoom out.
     """
     _BRAND_PINK   = "#ef2b89"
     _BRAND_PURPLE = "#7B34DB"
@@ -348,6 +360,13 @@ def plot_fire_monitor(
                 linewidth=0.6,
                 alpha=0.9,
             )
+            gpd.GeoSeries([nuts2_geom], crs="EPSG:4326").plot(
+                ax=ax,
+                facecolor="none",
+                edgecolor=_BRAND_PINK,
+                linewidth=1.5,
+                aspect=None,
+            )
             ax.set_xlim(*zoom_xlim)
             ax.set_ylim(*zoom_ylim)
             ax.set_xlabel("Longitude")
@@ -394,6 +413,9 @@ def main(
     nuts2_region_name : str
         NUTS2 region name used to select the spatial area, e.g. ``"Galicia"``
         or ``"Ile-de-France"``. Resolved via :func:`find_nuts2_by_name`.
+    pad_ratio : float
+        Fractional padding shared by data cropping and map extent.
+        ``0`` keeps tight NUTS2 bounds; larger values provide more context.
 
     Returns
     -------
@@ -446,7 +468,7 @@ def main(
     log.info(f"Processing netCDF: {nc_path}")
 
     try:
-        lons, lats, fire_prob, fire_result, flag_info, sensing_time = (
+        lons, lats, fire_result, flag_info, sensing_time = (
             _load_fire_data(nc_path, region_geom, pad_ratio)
         )
 
@@ -454,7 +476,6 @@ def main(
         plot_fire_monitor(
             lons=lons,
             lats=lats,
-            fire_prob=fire_prob,
             fire_result=fire_result,
             nuts2_geom=region_geom,
             png_path=str(plot_path),
