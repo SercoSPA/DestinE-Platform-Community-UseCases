@@ -91,7 +91,7 @@ cp manifest-remote.json manifest.json
 If needed, make the component name unique in `manifest.json` (for example by appending your username), then publish:
 
 ```shell
-deltatwin component publish -t active-fire -t tutorial 0.0
+deltatwin component publish -t active-fire 0.0
 ```
 
 ### Run on the service

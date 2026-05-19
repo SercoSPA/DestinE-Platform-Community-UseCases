@@ -1,5 +1,5 @@
 {
-  "name": "fire-monitor-dev",
+  "name": "fire-monitor",
   "description": "Active Fire Monitor component that downloads MTG FCI Active Fire Level-2 products from HDA and generates an active fire classification plot for a selected NUTS2 region.",
   "license": {
     "name": "LGPLv3",
@@ -29,7 +29,8 @@
     },
     "download_date": {
       "type": "string",
-      "description": "End date for the FCI Active Fire product search in YYYY-MM-DD format."
+      "description": "End date for the FCI Active Fire product search in YYYY-MM-DD format. If left as 'none' it will default to Today's date.",
+      "value": "none"
     }
   },
 
@@ -107,7 +108,8 @@
           "type": "string"
         },
         "download_date": {
-          "type": "string"
+          "type": "string",
+          "value": "none"
         }
       },
       "outputs": {

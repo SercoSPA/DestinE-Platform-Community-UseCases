@@ -354,7 +354,7 @@ def plot_fire_monitor(
 
 def main(
     download_collection_id: str = "EO.EUM.DAT.MTG.FCI-ACTIVE_FIRE-L2-V1",
-    download_date: str | None = "2025-08-16",
+    download_date: str | None = None,
     download_lookback_days: int = 1,
     download_out_path: str | Path = "./.delta",
     download_limit: int = 20,
@@ -393,11 +393,12 @@ def main(
     int
         Zero on success, non-zero on failure.
     """
-    end_dt = (
-        datetime.strptime(download_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-        if download_date is not None
-        else datetime.now(tz=timezone.utc)
-    )
+
+    try:
+        end_dt = datetime.strptime(download_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        end_dt = datetime.now(tz=timezone.utc)
+
     start_dt = end_dt - timedelta(days=download_lookback_days)
     download_datetime_range = (
         f"{start_dt.strftime('%Y-%m-%dT%H:%M:%SZ')}/{end_dt.strftime('%Y-%m-%dT%H:%M:%SZ')}"
