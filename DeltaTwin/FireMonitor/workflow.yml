@@ -1,0 +1,49 @@
+nodes:
+  - id: user
+    ref: inputs.user
+
+  - id: password
+    ref: inputs.password
+
+  - id: nuts2_region_name
+    ref: inputs.nuts2_region_name
+
+  - id: download_date
+    ref: inputs.download_date
+
+  - id: fire_monitor
+    ref: models.fire_monitor
+
+  - id: plot
+    ref: outputs.fire-monitor-plot
+
+edges:
+  - from:
+      id: user
+    to:
+      id: fire_monitor
+      port: user
+
+  - from:
+      id: password
+    to:
+      id: fire_monitor
+      port: password
+
+  - from:
+      id: nuts2_region_name
+    to:
+      id: fire_monitor
+      port: nuts2_region_name
+
+  - from:
+      id: download_date
+    to:
+      id: fire_monitor
+      port: download_date
+
+  - from:
+      id: fire_monitor
+      port: fire-monitor-plot
+    to:
+      id: plot

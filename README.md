@@ -8,12 +8,17 @@ The goal is to provide practical, reproducible examples that show how domain wor
 
 ## Current Use Cases
 
-At the moment, the repository includes two [Delta Twin service](https://deltatwin.destine.eu/) use cases:
+At the moment, the repository includes three [Delta Twin service](https://deltatwin.destine.eu/) use cases:
 
+- [Fire Monitor](DeltaTwin/FireMonitor/README.md): downloads MTG FCI Active Fire products, extracts fire classification over a selected NUTS2 region, and exports a fire classification plot.
 - [Fire Risk Plotter](DeltaTwin/FireRiskPlotter/README.md): retrieves short-term fire risk forecast products and generates an animated forecast GIF.
 - [LST Plotter](DeltaTwin/LSTPlotter/README.md): downloads Landsat products, computes Land Surface Temperature over a selected area, and exports both raster and plot outputs.
 
 ## Example Outputs
+
+### Fire Monitor
+
+<img src="DeltaTwin/FireMonitor/assets/fire_monitor_plot.png" alt="Fire Monitor Example" width="80%" />
 
 ### Fire Risk Plotter
 
@@ -27,6 +32,7 @@ At the moment, the repository includes two [Delta Twin service](https://deltatwi
 
 For setup, local execution, publishing, and service-run instructions, refer to the dedicated README of each use case:
 
+- [Fire Monitor](DeltaTwin/FireMonitor/README.md)
 - [Fire Risk Plotter](DeltaTwin/FireRiskPlotter/README.md)
 - [LST Plotter](DeltaTwin/LSTPlotter/README.md)
 
