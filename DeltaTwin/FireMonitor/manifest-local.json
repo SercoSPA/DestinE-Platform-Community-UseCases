@@ -29,7 +29,7 @@
     },
     "download_date": {
       "type": "string",
-      "description": "End date for the FCI Active Fire product search in YYYY-MM-DD format. If left as 'none' it will default to Today's date.",
+      "description": "End date for the FCI Active Fire product search in YYYY-MM-DD format. If left as 'none' it will default to today.",
       "value": "none"
     }
   },
