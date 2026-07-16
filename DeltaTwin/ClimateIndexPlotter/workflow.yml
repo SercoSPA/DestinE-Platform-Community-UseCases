@@ -1,0 +1,58 @@
+nodes:
+  - id: edh_api_key
+    ref: inputs.edh_api_key
+
+  - id: model
+    ref: inputs.model
+
+  - id: indices
+    ref: inputs.indices
+
+  - id: aoi_bbox
+    ref: inputs.aoi_bbox
+
+  - id: aoi_shapefile
+    ref: inputs.aoi_shapefile
+
+  - id: climate_index_plotter
+    ref: models.climate_index_plotter
+
+  - id: plots
+    ref: outputs.etccdi-plots
+
+edges:
+  - from:
+      id: edh_api_key
+    to:
+      id: climate_index_plotter
+      port: edh_api_key
+
+  - from:
+      id: model
+    to:
+      id: climate_index_plotter
+      port: model
+
+  - from:
+      id: indices
+    to:
+      id: climate_index_plotter
+      port: indices
+
+  - from:
+      id: aoi_bbox
+    to:
+      id: climate_index_plotter
+      port: aoi_bbox
+
+  - from:
+      id: aoi_shapefile
+    to:
+      id: climate_index_plotter
+      port: aoi_shapefile
+
+  - from:
+      id: climate_index_plotter
+      port: etccdi-plots
+    to:
+      id: plots

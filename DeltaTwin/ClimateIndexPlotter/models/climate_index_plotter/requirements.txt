@@ -1,0 +1,13 @@
+xarray
+zarr>=3
+dask
+fsspec
+aiohttp
+xclim
+numpy
+pandas
+cftime
+geopandas
+shapely
+regionmask
+matplotlib

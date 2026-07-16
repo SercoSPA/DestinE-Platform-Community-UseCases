@@ -1,0 +1,110 @@
+{
+  "name": "climate-index-plotter",
+  "description": "Computes ETCCDI climate indices from the DestinE Climate DT (streamed from Earth Data Hub) and plots, per index, the projected change between a historical period (1999-2014) and a future projection period (2025-2049) as a two-panel absolute and percentage variation map.",
+  "license": {
+    "name": "LGPLv3",
+    "url": "https://www.gnu.org/licenses/gpl-3.0.txt",
+    "description": "",
+    "copyrights": [
+      {
+        "years": [2026],
+        "company": "Serco"
+      }
+    ]
+  },
+  "owner": "Serco",
+
+  "inputs": {
+    "edh_api_key": {
+      "type": "secret",
+      "description": "Earth Data Hub API key from your DESP account settings. Climate DT requires upgraded DESP access."
+    },
+    "model": {
+      "type": "string",
+      "description": "Climate DT model: 'IFS-NEMO', 'IFS-FESOM' or 'ICON'. Applied to both periods.",
+      "value": "IFS-NEMO"
+    },
+    "indices": {
+      "type": "string",
+      "description": "Comma-separated ETCCDI index ids (e.g. 'TXx,FD,Rx1day'), or 'all' for all 27.",
+      "value": "TXx,FD,Rx1day"
+    },
+    "aoi_bbox": {
+      "type": "string",
+      "description": "Area of interest as 'west,south,east,north' in degrees. Required unless aoi_shapefile is given.",
+      "value": "none"
+    },
+    "aoi_shapefile": {
+      "type": "string",
+      "description": "Path or URL to a shapefile/GeoJSON polygon. Results are masked to it; derives the bbox if aoi_bbox is 'none'.",
+      "value": "none"
+    }
+  },
+
+  "outputs": {
+    "etccdi-plots": {
+      "type": "Data",
+      "description": "One PNG per selected ETCCDI index showing absolute and percentage variation between the historical and future periods."
+    }
+  },
+
+  "models": {
+    "climate_index_plotter": {
+      "path": "models/climate_index_plotter",
+      "type": "python",
+      "parameters": {
+        "pythonVersion": "3.11",
+        "aptRequirements": [],
+        "pipRequirements": [
+          {"name": "xarray"},
+          {"name": "zarr", "version": "3.0.0"},
+          {"name": "dask"},
+          {"name": "fsspec"},
+          {"name": "aiohttp"},
+          {"name": "xclim"},
+          {"name": "numpy"},
+          {"name": "pandas"},
+          {"name": "cftime"},
+          {"name": "geopandas"},
+          {"name": "shapely"},
+          {"name": "regionmask"},
+          {"name": "matplotlib"}
+        ],
+        "hardwareRequirements": {
+          "cpu": "4000m",
+          "ram": "16Gi"
+        },
+        "command": "python climate_index_plotter.py $(inputs.edh_api_key) $(inputs.model) $(inputs.indices) $(inputs.aoi_bbox) $(inputs.aoi_shapefile)"
+      },
+      "inputs": {
+        "edh_api_key": {
+          "type": "secret"
+        },
+        "model": {
+          "type": "string",
+          "value": "IFS-NEMO"
+        },
+        "indices": {
+          "type": "string",
+          "value": "TXx,FD,Rx1day"
+        },
+        "aoi_bbox": {
+          "type": "string",
+          "value": "none"
+        },
+        "aoi_shapefile": {
+          "type": "string",
+          "value": "none"
+        }
+      },
+      "outputs": {
+        "etccdi-plots": {
+          "type": "Data",
+          "glob": "etccdi_*.png"
+        }
+      }
+    }
+  },
+
+  "dependencies": {}
+}

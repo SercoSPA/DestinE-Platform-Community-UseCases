@@ -1,0 +1,22 @@
+{
+  "edh_api_key": {
+    "type": "string",
+    "value": "XXXXXX"
+  },
+  "model": {
+    "type": "string",
+    "value": "IFS-NEMO"
+  },
+  "indices": {
+    "type": "string",
+    "value": "TXx,FD,Rx1day"
+  },
+  "aoi_bbox": {
+    "type": "string",
+    "value": "6,38,14,45"
+  },
+  "aoi_shapefile": {
+    "type": "string",
+    "value": "none"
+  }
+}
