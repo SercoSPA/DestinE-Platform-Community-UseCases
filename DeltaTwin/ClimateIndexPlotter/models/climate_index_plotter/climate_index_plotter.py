@@ -11,8 +11,6 @@ import logging
 import os
 import sys
 
-import numpy as np
-
 import aoi
 import daily
 import edh
@@ -36,14 +34,27 @@ def output_filename(index_id, hist_years, future_years, model, scenario) -> str:
 
 
 def variables_for(ids) -> list[str]:
-    """EDH variables to stream for the given indices (t2m for temperature, tp for precip)."""
+    """EDH variables to stream for the given indices.
+
+    t2m (2 m temperature) covers the temperature indices; avg_tprate (mean total
+    precipitation rate) covers the precipitation indices.
+    """
     req = indices.required_variables(ids)
     variables = []
     if req & {"tasmin", "tasmax", "tas"}:
         variables.append("t2m")
     if "pr" in req:
-        variables.append("tp")
+        variables.append("avg_tprate")
     return variables
+
+
+def percent_change(future, historical):
+    """Percentage change relative to the historical field.
+
+    Zero-valued historical cells are masked (result NaN) to avoid division by zero.
+    """
+    denom = historical.where(historical != 0)
+    return (future - historical) / denom * 100.0
 
 
 def _load_daily(model, experiment, years, bbox, variables, api_key):
@@ -82,9 +93,8 @@ def main(
 
         variation = fut_clim - hist_clim
         variation.attrs["units"] = hist_clim.attrs.get("units", "")
-        with np.errstate(divide="ignore", invalid="ignore"):
-            variation_pct = variation / hist_clim * 100.0
-        variation_pct = variation_pct.where(np.isfinite(variation_pct))
+        variation_pct = percent_change(fut_clim, hist_clim)
+        variation_pct.attrs["units"] = "%"
 
         long_name = indices.INDEX_REGISTRY[index_id].long_name
         subtitle = (
@@ -95,7 +105,9 @@ def main(
         out_path = os.path.join(
             out_dir, output_filename(index_id, HIST_YEARS, FUTURE_YEARS, model, SCENARIO)
         )
-        plot.plot_variation(index_id, variation, variation_pct, out_path, subtitle=subtitle)
+        plot.plot_variation(
+            index_id, hist_clim, fut_clim, variation, variation_pct, out_path, subtitle=subtitle
+        )
 
     log.info("Done: wrote %d plot(s) to %s", len(ids), out_dir)
     return 0

@@ -35,21 +35,23 @@ def test_temperature_units_preserved_kelvin():
     assert out["tas"].attrs["units"] == "K"
 
 
-def test_pr_is_daily_sum_converted_to_mm():
+def test_pr_from_avg_tprate_converted_to_mm_per_day():
     time = pd.date_range("2000-01-01", periods=24, freq="h")
-    # 0.001 m (= 1 mm) each hour -> 24 mm/day
-    tp = xr.DataArray(
-        np.full((24, 1, 1), 0.001),
+    # constant rate 1e-4 kg m-2 s-1 -> 1e-4 * 86400 = 8.64 mm/day
+    rate = xr.DataArray(
+        np.full((24, 1, 1), 1e-4),
         dims=("time", "lat", "lon"),
         coords={"time": time, "lat": [45.0], "lon": [10.0]},
     )
-    ds = xr.Dataset({"t2m": (("time", "lat", "lon"), np.zeros((24, 1, 1))), "tp": tp})
+    ds = xr.Dataset(
+        {"t2m": (("time", "lat", "lon"), np.zeros((24, 1, 1))), "avg_tprate": rate}
+    )
     out = daily.to_daily(ds)
-    np.testing.assert_allclose(out["pr"].isel(lat=0, lon=0).values, [24.0])
+    np.testing.assert_allclose(out["pr"].isel(lat=0, lon=0).values, [8.64])
     assert out["pr"].attrs["units"] == "mm/d"
 
 
-def test_no_tp_means_no_pr_variable():
+def test_no_precip_variable_means_no_pr_variable():
     out = daily.to_daily(_hourly_t2m())
     assert "pr" not in out
     assert "tasmax" in out

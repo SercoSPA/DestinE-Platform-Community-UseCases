@@ -8,17 +8,18 @@ import xarray as xr
 
 log = logging.getLogger(__name__)
 
-_MM_PER_METRE = 1000.0
+_SECONDS_PER_DAY = 86400.0
+_PRECIP_RATE_VAR = "avg_tprate"
 
 
 def to_daily(ds: xr.Dataset) -> xr.Dataset:
-    """Resample hourly ``t2m``/``tp`` to daily ETCCDI input variables.
+    """Resample hourly ``t2m``/``avg_tprate`` to daily ETCCDI input variables.
 
     From hourly 2 m temperature (``t2m``, Kelvin):
       - ``tasmax`` = daily maximum, ``tasmin`` = daily minimum, ``tas`` = daily mean.
 
-    From hourly total precipitation (``tp``, metres of hourly accumulation):
-      - ``pr`` = daily sum converted to mm (``mm/d``).
+    From the hourly mean total precipitation rate (``avg_tprate``, kg m-2 s-1 = mm/s):
+      - ``pr`` = daily-mean rate times seconds-per-day, i.e. the daily total in ``mm/d``.
 
     Only the variables present in ``ds`` are produced. ``t2m`` is required.
     """
@@ -39,8 +40,8 @@ def to_daily(ds: xr.Dataset) -> xr.Dataset:
         "tas": daily_mean,
     }
 
-    if "tp" in ds:
-        pr = ds["tp"].resample(time="1D").sum() * _MM_PER_METRE
+    if _PRECIP_RATE_VAR in ds:
+        pr = ds[_PRECIP_RATE_VAR].resample(time="1D").mean() * _SECONDS_PER_DAY
         pr.attrs["units"] = "mm/d"
         data["pr"] = pr
 

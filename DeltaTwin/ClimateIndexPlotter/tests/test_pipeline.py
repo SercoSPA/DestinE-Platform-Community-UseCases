@@ -23,14 +23,13 @@ def _synthetic_hourly(experiment, variables):
     seasonal = 285.0 + 10.0 * np.sin(2 * np.pi * doy / 365.0) + 3.0 * np.sin(2 * np.pi * hod / 24.0)
     t2m = (seasonal + warming)[:, None, None] * np.ones((n, 2, 2))
     data = {"t2m": (("time", "lat", "lon"), t2m)}
-    if "tp" in variables:
-        rain = np.where(doy % 5 == 0, 0.002, 0.0)  # 2mm on every 5th day, per hour
-        tp = rain[:, None, None] * np.ones((n, 2, 2))
-        data["tp"] = (("time", "lat", "lon"), tp)
+    if "avg_tprate" in variables:
+        rate = np.where(doy % 5 == 0, 5e-5, 0.0)  # rain on every 5th day (kg m-2 s-1)
+        data["avg_tprate"] = (("time", "lat", "lon"), rate[:, None, None] * np.ones((n, 2, 2)))
     ds = xr.Dataset(data, coords={"time": time, "lat": lat, "lon": lon})
     ds["t2m"].attrs["units"] = "K"
-    if "tp" in data:
-        ds["tp"].attrs["units"] = "m"
+    if "avg_tprate" in data:
+        ds["avg_tprate"].attrs["units"] = "kg m-2 s-1"
     return ds
 
 
@@ -68,9 +67,11 @@ def test_pipeline_temperature_warming_positive_txx_variation(tmp_path, monkeypat
 
     real_plot = cip.plot.plot_variation
 
-    def capture_plot(index_id, variation, variation_pct, out_path, subtitle=""):
+    def capture_plot(index_id, hist_clim, fut_clim, variation, variation_pct, out_path, subtitle=""):
         captured[index_id] = float(variation.mean())
-        return real_plot(index_id, variation, variation_pct, out_path, subtitle=subtitle)
+        return real_plot(
+            index_id, hist_clim, fut_clim, variation, variation_pct, out_path, subtitle=subtitle
+        )
 
     monkeypatch.setattr(cip.plot, "plot_variation", capture_plot)
 

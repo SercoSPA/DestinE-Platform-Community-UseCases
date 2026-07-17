@@ -25,8 +25,8 @@ The comparison is between two fixed periods, using the same model for both:
 - future projection period: 2025-2049 (experiment `SSP3-7.0`, the Climate DT scenario)
 
 Data is read at `standard` resolution on a regular latitude/longitude grid. Hourly Climate DT
-`t2m` and `tp` are aggregated to the daily inputs the indices require (`tasmax`, `tasmin`,
-`tas`, `pr`). Percentile-based indices use day-of-year percentile thresholds derived from the
+`t2m` and `avg_tprate` are aggregated to the daily inputs the indices require (`tasmax`,
+`tasmin`, `tas`, `pr`). Percentile-based indices use day-of-year percentile thresholds derived from the
 historical period as their base.
 
 ### Inputs

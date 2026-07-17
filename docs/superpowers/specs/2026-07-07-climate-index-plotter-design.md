@@ -11,10 +11,13 @@ indices** from the DestinE **Climate Change Adaptation Digital Twin (Climate DT)
 plots how each index is projected to change between a **historical** period (1999–2014)
 and a **future projection** period (2025–2049) over a user-chosen area.
 
-For each selected ETCCDI index the component produces one PNG with two horizontal panels:
+For each selected ETCCDI index the component produces one PNG with four panels (2x2), with
+coastlines and country borders overlaid and no gridlines:
 
-- **Left** — absolute variation: `variation = index_future − index_historical`
-- **Right** — percentage variation: `variation_pct = (index_future − index_historical) / index_historical × 100`
+- **Top-left** — historical index climatology
+- **Top-right** — future index climatology (shared colour scale with top-left)
+- **Bottom-left** — absolute variation: `variation = index_future − index_historical`
+- **Bottom-right** — percentage variation: `variation_pct = (index_future − index_historical) / index_historical × 100`
 
 It is the fourth use case in this repository, alongside FireMonitor, FireRiskPlotter and
 LSTPlotter, and follows the same DeltaTwin component layout. Its distinguishing feature is
@@ -54,8 +57,8 @@ Relevant published datasets (surface, hourly), for **all three models**
 - **Grid:** regular lat/lon; `high` = 0.044°, plus a coarser `standard` variant — **this
   component uses `standard`**. Bbox subsetting is a trivial `.sel()`. Chunking variants
   exist (`timeseries` vs `maps`); regional multi-year extraction favours time-series chunking.
-- **Variables:** `t2m` (2 m temperature, Kelvin) and `tp` (total precipitation, metres,
-  hourly accumulation) are both present, plus many others.
+- **Variables:** `t2m` (2 m temperature, Kelvin) and `avg_tprate` (time-mean total
+  precipitation rate, kg m-2 s-1 = mm/s) are present, plus many others. There is no `tp`.
 - **Access pattern (verbatim from EDH getting-started):**
 
   ```python
@@ -74,20 +77,19 @@ Relevant published datasets (surface, hourly), for **all three models**
   requires upgraded DESP access. Monthly quota ~500,000 requests.
 - **Required packages:** `xarray`, `zarr>3`, `dask`, `aiohttp`.
 
-> **To confirm during implementation:** the exact Zarr URL per
-> `(model, experiment, resolution)`. The catalogue dataset slug
-> (e.g. `IFS-NEMO-hist-sfc-hourly-standard`) differs from the Zarr asset path
-> (e.g. `.../d1-climate-dt/ScenarioMIP-SSP3-7.0-IFS-NEMO-0001-high-sfc-v0.zarr`); resolve
-> the real URLs from the live EDH catalogue and encode them in a small registry.
+> **Resolved (verified against live catalogue):** EDH Zarr URLs are
+> `https://api.earthdatahub.destine.eu/climate-dt-2/<MODEL>-<EXPERIMENT>-sfc-hourly-standard-v0.zarr`,
+> e.g. `IFS-NEMO-hist-sfc-hourly-standard-v0.zarr` and
+> `IFS-NEMO-SSP3-7.0-sfc-hourly-standard-v0.zarr`. The `standard` grid is 0.35 degrees.
 
 ### 2.2 ETCCDI indices and xclim
 
 There are **27 core ETCCDI indices**, grouped by required daily input variable. Climate DT
-provides **only hourly** `t2m`/`tp` (no daily max/min statistics), so daily inputs are
-derived by resampling:
+provides **only hourly** `t2m`/`avg_tprate` (no daily max/min statistics), so daily inputs
+are derived by resampling:
 
 - `tasmax` = daily max of `t2m`; `tasmin` = daily min; `tas` = daily mean.
-- `pr` = daily sum of hourly `tp`, converted m → mm (× 1000), units `mm/d`.
+- `pr` = daily-mean `avg_tprate` × 86400 (mm/s → mm/day), units `mm/d`.
 
 `xclim.indices.*` computes every index from daily `xarray.DataArray`s with a resampling
 frequency (`freq="YS"` for annual), and handles unit conversion via `pint`. The lower-level
@@ -143,7 +145,7 @@ Location: `DeltaTwin/ClimateIndexPlotter/models/climate_index_plotter/`
 | `aoi.py` | Parse bbox string **or** shapefile → `(bbox, mask geometry \| None)` | `resolve_aoi(bbox_str, shapefile) -> tuple[Bbox, BaseGeometry \| None]` | geopandas, shapely |
 | `daily.py` | Hourly → daily aggregation | `to_daily(ds) -> xr.Dataset` (`tasmax, tasmin, tas, pr`) | xarray |
 | `indices.py` | ETCCDI registry + per-index climatology (incl. percentile prep) | `INDEX_REGISTRY`; `compute_climatology(index_id, daily_ds, base_percentiles) -> xr.DataArray` | xclim |
-| `plot.py` | Two-panel (variation \| variation-%) PNG per index | `plot_variation(index_id, variation, variation_pct, aoi, out_path) -> None` | matplotlib, cartopy |
+| `plot.py` | Four-panel (historical \| future ; variation \| variation-%) PNG per index, coastlines/borders overlaid, no gridlines | `plot_variation(index_id, hist_clim, fut_clim, variation, variation_pct, out_path) -> None` | matplotlib, cartopy |
 | `requirements.txt` | Pinned deps | — | — |
 
 Each module has one job and a documented interface, testable on synthetic data without
@@ -192,7 +194,8 @@ resolution `standard`, scenario `SSP3-7.0`, percentile base period = historical 
 
 ### Outputs
 
-- One PNG per selected index, named
+- One four-panel PNG per selected index (historical, future, variation, variation-%, with
+  coastlines/borders and no gridlines), named
   `etccdi_<INDEX>_<histperiod>_<futperiod>_<model>_<scenario>.png`
   (e.g. `etccdi_TXx_1999-2014_2025-2049_IFS-NEMO_SSP3-7.0.png`).
 - Captured by output glob `etccdi_*.png`.
@@ -233,9 +236,9 @@ Real logic exercised on **synthetic in-memory `xarray`** — no network mocks:
 
 ## 9. Risks & open items (resolve during implementation)
 
-1. **Exact EDH Zarr URLs** per `(model, experiment, resolution)` — resolve from live catalogue.
-2. **Coordinate/dimension names** on the regridded datasets (`lat`/`lon` vs `latitude`/`longitude`) — inspect and normalise.
-3. **`tp` accumulation semantics** (per-hour vs cumulative) — verify before summing to daily.
+1. **Exact EDH Zarr URLs** — resolved: `climate-dt-2/<MODEL>-<EXPERIMENT>-sfc-hourly-standard-v0.zarr` (standard grid 0.35 degrees).
+2. **Coordinate/dimension names** on the regridded datasets (`lat`/`lon` vs `latitude`/`longitude`, `time` naming, and longitude convention 0-360 vs -180-180) — normalise in `edh.py`; verify against live data.
+3. **Precipitation variable** — resolved: Climate DT exposes `avg_tprate` (time-mean rate, kg m-2 s-1), not `tp`. Daily total mm = daily-mean rate x 86400.
 4. **Data volume** — at `standard` resolution over the fixed periods (16 yr historical + 25 yr future, hourly), large AOIs stream many chunks; document AOI-size guidance and consider a soft size guard.
 5. **EDH auth in-container** — confirm the API key (secret input) works from the DeltaTwin runtime; check whether a DESP token can be reused to avoid a second credential.
 6. **ICON future coverage** upper years may lag 2049 — validate the 2025–2049 range for ICON.

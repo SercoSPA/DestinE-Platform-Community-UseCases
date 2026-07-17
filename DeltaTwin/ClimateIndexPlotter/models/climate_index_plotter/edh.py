@@ -17,26 +17,25 @@ import xarray as xr
 log = logging.getLogger(__name__)
 
 _HOST = "https://api.earthdatahub.destine.eu"
-_BASE_PATH = "d1-climate-dt"
+_BASE_PATH = "climate-dt-2"
 _MODELS = {"IFS-NEMO", "IFS-FESOM", "ICON"}
-_EXPERIMENT_ACTIVITY = {"hist": "CMIP6", "SSP3-7.0": "ScenarioMIP"}
+_EXPERIMENTS = {"hist", "SSP3-7.0"}
 _DEFAULT_RESOLUTION = "standard"
 
 
 def zarr_url(model: str, experiment: str, resolution: str = _DEFAULT_RESOLUTION) -> str:
-    """Public Zarr URL for a Climate DT surface-hourly dataset.
+    """Public Zarr URL for a Climate DT surface-hourly dataset on Earth Data Hub.
 
-    Slug pattern (from the EDH catalogue), e.g.
-    ``ScenarioMIP-SSP3-7.0-IFS-NEMO-0001-high-sfc-v0.zarr``.
+    Slug pattern (from the EDH ``climate-dt-2`` catalogue), e.g.
+    ``IFS-NEMO-hist-sfc-hourly-standard-v0.zarr``.
     """
     if model not in _MODELS:
         raise ValueError(f"Unknown model {model!r}. Valid: {sorted(_MODELS)}")
-    if experiment not in _EXPERIMENT_ACTIVITY:
+    if experiment not in _EXPERIMENTS:
         raise ValueError(
-            f"Unknown experiment {experiment!r}. Valid: {sorted(_EXPERIMENT_ACTIVITY)}"
+            f"Unknown experiment {experiment!r}. Valid: {sorted(_EXPERIMENTS)}"
         )
-    activity = _EXPERIMENT_ACTIVITY[experiment]
-    slug = f"{activity}-{experiment}-{model}-0001-{resolution}-sfc-v0.zarr"
+    slug = f"{model}-{experiment}-sfc-hourly-{resolution}-v0.zarr"
     return f"{_HOST}/{_BASE_PATH}/{slug}"
 
 

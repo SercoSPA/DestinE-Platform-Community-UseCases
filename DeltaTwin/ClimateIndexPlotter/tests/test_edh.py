@@ -9,18 +9,18 @@ import edh
 from aoi import Bbox
 
 
-def test_zarr_url_matches_documented_example():
-    url = edh.zarr_url("IFS-NEMO", "SSP3-7.0", resolution="high")
-    assert url == (
-        "https://api.earthdatahub.destine.eu/d1-climate-dt/"
-        "ScenarioMIP-SSP3-7.0-IFS-NEMO-0001-high-sfc-v0.zarr"
+def test_zarr_url_standard_future_matches_catalogue():
+    assert edh.zarr_url("IFS-NEMO", "SSP3-7.0") == (
+        "https://api.earthdatahub.destine.eu/climate-dt-2/"
+        "IFS-NEMO-SSP3-7.0-sfc-hourly-standard-v0.zarr"
     )
 
 
-def test_zarr_url_standard_default_and_historical():
-    url = edh.zarr_url("ICON", "hist")
-    assert url.startswith("https://api.earthdatahub.destine.eu/d1-climate-dt/")
-    assert "CMIP6-hist-ICON-0001-standard-sfc-v0.zarr" in url
+def test_zarr_url_standard_historical_matches_catalogue():
+    assert edh.zarr_url("IFS-NEMO", "hist") == (
+        "https://api.earthdatahub.destine.eu/climate-dt-2/"
+        "IFS-NEMO-hist-sfc-hourly-standard-v0.zarr"
+    )
 
 
 def test_zarr_url_invalid_model_and_experiment_raise():
