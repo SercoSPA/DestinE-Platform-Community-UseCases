@@ -54,9 +54,9 @@ Relevant published datasets (surface, hourly), for **all three models**
 | Historical (`hist`) | 1990–2014 | used for the "historical" period |
 | Future (`SSP3-7.0`, ScenarioMIP) | 2015–2049 | used for the "future projection" period (ICON upper years may lag — verify) |
 
-- **Grid:** regular lat/lon; `high` = 0.044°, plus a coarser `standard` variant — **this
-  component uses `standard`**. Bbox subsetting is a trivial `.sel()`. Chunking variants
-  exist (`timeseries` vs `maps`); regional multi-year extraction favours time-series chunking.
+- **Grid:** regular lat/lon; `high` = 0.044°, plus a coarser `standard` variant. Bbox
+  subsetting is a trivial `.sel()`. Chunking variants exist (`timeseries` vs `maps`);
+  regional multi-year extraction favours time-series chunking.
 - **Variables:** `t2m` (2 m temperature, Kelvin) and `avg_tprate` (time-mean total
   precipitation rate, kg m-2 s-1 = mm/s) are present, plus many others. There is no `tp`.
 - **Access pattern (verbatim from EDH getting-started):**
@@ -77,10 +77,21 @@ Relevant published datasets (surface, hourly), for **all three models**
   requires upgraded DESP access. Monthly quota ~500,000 requests.
 - **Required packages:** `xarray`, `zarr>3`, `dask`, `aiohttp`.
 
-> **Resolved (verified against live catalogue):** EDH Zarr URLs are
-> `https://api.earthdatahub.destine.eu/climate-dt-2/<MODEL>-<EXPERIMENT>-sfc-hourly-standard-v0.zarr`,
+> **Resolved (verified against the live store, 2026-07-29):** EDH Zarr URLs are
+> `https://api.earthdatahub.destine.eu/climate-dt-2/<MODEL>-<EXPERIMENT>-sfc-hourly-<VARIANT>-v0.zarr`,
 > e.g. `IFS-NEMO-hist-sfc-hourly-standard-v0.zarr` and
-> `IFS-NEMO-SSP3-7.0-sfc-hourly-standard-v0.zarr`. The `standard` grid is 0.35 degrees.
+> `IFS-NEMO-SSP3-7.0-sfc-hourly-standard-v0.zarr`.
+>
+> | variant | global grid | spacing | pixel at 42°N | `t2m` chunks |
+> |---|---|---|---|---|
+> | `standard` | 512 x 1025 | 0.352° | 39 km N-S, 29 km E-W | 1440 x 64 x 64 |
+> | `high-timeseries` | 4096 x 8193 | 0.0440° | 4.9 km N-S, 3.6 km E-W | 6480 x 32 x 32 |
+> | `high-maps` | 4096 x 8193 | 0.0440° | as above | 24 x 512 x 512 |
+>
+> There is **no daily surface product** — only `sfc-hourly` (plus ocean/sea-ice `o2d-daily`),
+> so hourly-to-daily aggregation on the client is unavoidable. `resolution` is a run input:
+> `standard` (default) or `high`, which resolves to `high-timeseries`; `high-maps` chunking is
+> wrong for reading whole periods over a small area.
 
 ### 2.2 ETCCDI indices and xclim
 
@@ -140,8 +151,8 @@ Location: `DeltaTwin/ClimateIndexPlotter/models/climate_index_plotter/`
 
 | Module | Responsibility | Key interface | Depends on |
 |---|---|---|---|
-| `climate_index_plotter.py` | CLI entry + orchestration (mirrors `fire_monitor.py:main`) | `main(model, indices, aoi_bbox, aoi_shapefile) -> int` | all below |
-| `edh.py` | Zarr-URL registry `(model, experiment) → url`; API-key auth setup; lazy subset open | `open_period(model, experiment, bbox, year_range, variables) -> xr.Dataset` | xarray, zarr, dask, aiohttp |
+| `climate_index_plotter.py` | CLI entry + orchestration (mirrors `fire_monitor.py:main`); single-pass evaluation of all climatologies | `main(model, indices, aoi_bbox, aoi_shapefile, resolution) -> int`; `compute_climatologies(ids, daily_hist, daily_fut) -> dict` | all below |
+| `edh.py` | Zarr-URL registry `(model, experiment, resolution) → url`; API-key auth setup; lazy subset open; chunk-aligned volume estimate | `open_period(...) -> xr.Dataset`; `stream_bytes(ds, variables) -> int`; `grid_spacing(resolution) -> float` | xarray, zarr, dask, aiohttp |
 | `aoi.py` | Parse bbox string **or** shapefile → `(bbox, mask geometry \| None)` | `resolve_aoi(bbox_str, shapefile) -> tuple[Bbox, BaseGeometry \| None]` | geopandas, shapely |
 | `daily.py` | Hourly → daily aggregation | `to_daily(ds) -> xr.Dataset` (`tasmax, tasmin, tas, pr`) | xarray |
 | `indices.py` | ETCCDI registry + per-index climatology (incl. percentile prep) | `INDEX_REGISTRY`; `compute_climatology(index_id, daily_ds, base_percentiles) -> xr.DataArray` | xclim |
@@ -152,8 +163,9 @@ Each module has one job and a documented interface, testable on synthetic data w
 network access (only `edh.open_period` touches the network).
 
 **Fixed constants (module-level, not run inputs):** `HIST_YEARS = (1999, 2014)`,
-`FUTURE_YEARS = (2025, 2049)`, `RESOLUTION = "standard"`, `SCENARIO = "SSP3-7.0"`; the
-percentile base period is the historical slice.
+`FUTURE_YEARS = (2025, 2049)`, `SCENARIO = "SSP3-7.0"`, `IO_THREADS = 16`,
+`MAX_STREAM_GB = 500`; the percentile base period is the historical slice. Resolution started
+as a fixed constant and became a run input (see §9.1).
 
 ### 4.1 Index registry (`indices.py`)
 
@@ -188,9 +200,10 @@ user-supplied `nn` threshold (default documented).
 | `indices` | string | `TXx,FD,Rx1day` | Comma-separated ETCCDI ids, or `all`. |
 | `aoi_bbox` | string | `none` | `"W,S,E,N"`. Required unless a shapefile is given. |
 | `aoi_shapefile` | string | `none` | Path/URL to shapefile/GeoJSON; enables polygon masking; derives bbox if `aoi_bbox` absent. |
+| `resolution` | string | `standard` | `standard` (0.35°, ~29 km) \| `high` (0.044°, ~4 km). See §2.1. |
 
 **Fixed (not run inputs):** historical period `1999–2014`, future period `2025–2049`,
-resolution `standard`, scenario `SSP3-7.0`, percentile base period = historical slice.
+scenario `SSP3-7.0`, percentile base period = historical slice.
 
 ### Outputs
 
@@ -223,8 +236,13 @@ Real logic exercised on **synthetic in-memory `xarray`** — no network mocks:
 - `indices`: registry covers all 27; a handful computed against hand-checked answers
   (e.g. FD count, TXx); percentile-prep output shape.
 - `plot`: smoke test — a PNG with two axes from small arrays.
-- `edh`: URL-registry + auth-setup unit tests; **one live streaming test gated on an API-key
-  env var** (skipped without creds) — avoids mocking the network.
+- `edh`: URL-registry (incl. resolution → variant) + auth-setup + `stream_bytes` chunk-alignment
+  unit tests; **live tests gated on an API-key env var** (skipped without creds) — a streaming
+  smoke test plus a grid-spacing assertion that pins the published pixel size per resolution.
+- `streaming`: read amplification. A dask-backed source whose chunks are produced by a counting
+  function is injected at `edh.open_period`; asserts the source is streamed about once per
+  period for 1, 3 and 10 indices, and that percentile indices cost at most one extra pass.
+  This is the regression guard for §9.5.
 
 ## 8. Documentation & repo conventions
 
@@ -239,9 +257,30 @@ Real logic exercised on **synthetic in-memory `xarray`** — no network mocks:
 1. **Exact EDH Zarr URLs** — resolved: `climate-dt-2/<MODEL>-<EXPERIMENT>-sfc-hourly-standard-v0.zarr` (standard grid 0.35 degrees).
 2. **Coordinate/dimension names** on the regridded datasets (`lat`/`lon` vs `latitude`/`longitude`, `time` naming, and longitude convention 0-360 vs -180-180) — normalise in `edh.py`; verify against live data.
 3. **Precipitation variable** — resolved: Climate DT exposes `avg_tprate` (time-mean rate, kg m-2 s-1), not `tp`. Daily total mm = daily-mean rate x 86400.
-4. **Data volume** — at `standard` resolution over the fixed periods (16 yr historical + 25 yr future, hourly), large AOIs stream many chunks; document AOI-size guidance and consider a soft size guard.
-5. **EDH auth in-container** — confirm the API key (secret input) works from the DeltaTwin runtime; check whether a DESP token can be reused to avoid a second credential.
-6. **ICON future coverage** upper years may lag 2049 — validate the 2025–2049 range for ICON.
+4. **Data volume** — resolved. Measured over the example Italy bbox (`7,36,19,47`) for the
+   fixed periods: `standard` streams ~24 GB for `t2m` + `avg_tprate`, `high` ~240 GB. Two
+   properties drive this and are worth remembering:
+   - **Chunk-aligned over-read.** Zarr reads whole chunks, so at `standard` resolution Italy
+     (31 x 35 cells) pulls 2 x 1 chunks of 64 x 64 = a 7.6x over-read. Shrinking the AOI below
+     one chunk column buys nothing; AOI-size limits are therefore the wrong lever. At `high`
+     the 32 x 32 chunks align far better (1.22x).
+   - **Reads are latency-bound, not bandwidth-bound.** Measured throughput on cold chunks rose
+     from ~23 MB/s at one Dask worker to ~176 MB/s at 16, flat above that. Dask's default pool
+     is sized by CPU count, so the component pins `IO_THREADS = 16`.
+
+   The run logs its estimated volume via `edh.stream_bytes` and refuses runs above 500 GB.
+5. **Read amplification (found during review, fixed).** Leaving climatologies lazy until
+   plotting made every `.values` call re-stream the hourly source: `plot.build_figure` touches
+   each array six times, so a 3-index run read `t2m` 12.1x and `avg_tprate` 6.1x (measured with
+   a chunk counter). All climatologies for both periods are now evaluated in one
+   `dask.compute`, giving 1.03x regardless of index count. Base percentiles are materialised
+   first since both periods consume them. `tests/test_streaming.py` guards this.
+6. **Daily chunking (found during review, fixed).** `resample(time="1D")` leaves one Dask chunk
+   per day, which bloats the graph and makes multi-day rolling indices (Rx5day) fail outright
+   on chunked input. `daily.to_daily` now regroups to yearly chunks, which also matches the
+   annual `freq="YS"` reduction.
+7. **EDH auth in-container** — confirm the API key (secret input) works from the DeltaTwin runtime; check whether a DESP token can be reused to avoid a second credential.
+8. **ICON future coverage** upper years may lag 2049 — validate the 2025–2049 range for ICON.
 
 ## 10. References
 
