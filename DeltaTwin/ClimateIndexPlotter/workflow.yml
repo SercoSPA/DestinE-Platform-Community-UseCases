@@ -14,6 +14,9 @@ nodes:
   - id: aoi_shapefile
     ref: inputs.aoi_shapefile
 
+  - id: resolution
+    ref: inputs.resolution
+
   - id: climate_index_plotter
     ref: models.climate_index_plotter
 
@@ -50,6 +53,12 @@ edges:
     to:
       id: climate_index_plotter
       port: aoi_shapefile
+
+  - from:
+      id: resolution
+    to:
+      id: climate_index_plotter
+      port: resolution
 
   - from:
       id: climate_index_plotter

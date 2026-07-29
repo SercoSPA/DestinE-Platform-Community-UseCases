@@ -20,10 +20,32 @@ _HOST = "https://api.earthdatahub.destine.eu"
 _BASE_PATH = "climate-dt-2"
 _MODELS = {"IFS-NEMO", "IFS-FESOM", "ICON"}
 _EXPERIMENTS = {"hist", "SSP3-7.0"}
-_DEFAULT_RESOLUTION = "standard"
+DEFAULT_RESOLUTION = "standard"
+
+# Climate DT is published on EDH regridded from its native ~5-10 km HEALPix grid to two
+# regular lat/lon variants. 'high' resolves to the high-timeseries variant, whose chunking
+# (6480 hours x 32 x 32 cells) suits this component's whole-period, small-area access
+# pattern; the high-maps variant (24 hours x 512 x 512) does not.
+RESOLUTIONS = {
+    "standard": ("standard", 0.352),
+    "high": ("high-timeseries", 0.044),
+}
 
 
-def zarr_url(model: str, experiment: str, resolution: str = _DEFAULT_RESOLUTION) -> str:
+def grid_spacing(resolution: str) -> float:
+    """Nominal grid spacing in degrees for a resolution keyword."""
+    return _resolution_entry(resolution)[1]
+
+
+def _resolution_entry(resolution: str) -> tuple[str, float]:
+    if resolution not in RESOLUTIONS:
+        raise ValueError(
+            f"Unknown resolution {resolution!r}. Valid: {sorted(RESOLUTIONS)}"
+        )
+    return RESOLUTIONS[resolution]
+
+
+def zarr_url(model: str, experiment: str, resolution: str = DEFAULT_RESOLUTION) -> str:
     """Public Zarr URL for a Climate DT surface-hourly dataset on Earth Data Hub.
 
     Slug pattern (from the EDH ``climate-dt-2`` catalogue), e.g.
@@ -35,7 +57,8 @@ def zarr_url(model: str, experiment: str, resolution: str = _DEFAULT_RESOLUTION)
         raise ValueError(
             f"Unknown experiment {experiment!r}. Valid: {sorted(_EXPERIMENTS)}"
         )
-    slug = f"{model}-{experiment}-sfc-hourly-{resolution}-v0.zarr"
+    variant = _resolution_entry(resolution)[0]
+    slug = f"{model}-{experiment}-sfc-hourly-{variant}-v0.zarr"
     return f"{_HOST}/{_BASE_PATH}/{slug}"
 
 
@@ -46,13 +69,49 @@ def authed_url(url: str, api_key: str) -> str:
 
 
 def normalize_coords(ds: xr.Dataset) -> xr.Dataset:
-    """Rename ``latitude``/``longitude`` to ``lat``/``lon`` if present."""
+    """Rename ``latitude``/``longitude`` to ``lat``/``lon`` if present.
+
+    ``preferred_chunks`` in each variable's encoding is renamed alongside, so the on-disk
+    chunk shape stays discoverable by dimension name (see :func:`stream_bytes`).
+    """
     rename = {}
     if "latitude" in ds.variables:
         rename["latitude"] = "lat"
     if "longitude" in ds.variables:
         rename["longitude"] = "lon"
-    return ds.rename(rename) if rename else ds
+    if not rename:
+        return ds
+
+    ds = ds.rename(rename)
+    for var in ds.variables.values():
+        preferred = var.encoding.get("preferred_chunks")
+        if preferred:
+            var.encoding["preferred_chunks"] = {
+                rename.get(dim, dim): size for dim, size in preferred.items()
+            }
+    return ds
+
+
+def stream_bytes(ds: xr.Dataset, variables: Iterable[str]) -> int:
+    """Uncompressed bytes that must be fetched to read ``variables`` over all of ``ds``.
+
+    Zarr is read a whole chunk at a time, so a selection that clips a chunk still costs the
+    full chunk. This counts the chunks the selection touches at their on-disk size, which is
+    what governs run time: a small AOI is no cheaper than one filling the same chunks.
+    """
+    total = 0
+    for name in variables:
+        var = ds[name]
+        if var.chunks is None:
+            total += var.nbytes
+            continue
+        preferred = var.encoding.get("preferred_chunks", {})
+        cells = 1
+        for dim, dim_chunks in zip(var.dims, var.chunks):
+            store_chunk = preferred.get(dim, max(dim_chunks))
+            cells *= len(dim_chunks) * store_chunk
+        total += cells * var.dtype.itemsize
+    return total
 
 
 def subset(ds: xr.Dataset, bbox, year_range, variables: Iterable[str]) -> xr.Dataset:
@@ -92,7 +151,7 @@ def open_period(
     year_range,
     variables: Iterable[str],
     api_key: Optional[str] = None,
-    resolution: str = _DEFAULT_RESOLUTION,
+    resolution: str = DEFAULT_RESOLUTION,
 ) -> xr.Dataset:
     """Open a Climate DT period from EDH and return the lazy AOI/time/variable subset."""
     api_key = api_key or os.environ.get("EDH_API_KEY")
@@ -101,12 +160,22 @@ def open_period(
             "No EDH API key: pass api_key or set EDH_API_KEY "
             "(get one from your DESP account settings; Climate DT needs upgraded access)."
         )
-    url = authed_url(zarr_url(model, experiment, resolution), api_key)
-    log.info("Opening EDH dataset: %s (%s)", zarr_url(model, experiment, resolution), experiment)
+    public_url = zarr_url(model, experiment, resolution)
+    log.info("Opening EDH dataset: %s (%s)", public_url, experiment)
     ds = xr.open_dataset(
-        url,
+        authed_url(public_url, api_key),
         engine="zarr",
         chunks={},
         storage_options={"client_kwargs": {"trust_env": True}},
     )
-    return subset(ds, bbox, year_range, variables)
+    ds = subset(ds, bbox, year_range, variables)
+    log.info(
+        "%s %s: grid %d lat x %d lon, %d hourly steps, %.1f GB to stream",
+        experiment,
+        year_range,
+        ds.sizes["lat"],
+        ds.sizes["lon"],
+        ds.sizes["time"],
+        stream_bytes(ds, variables) / 1e9,
+    )
+    return ds

@@ -1,4 +1,53 @@
+import numpy as np
+import pandas as pd
+import pytest
+import xarray as xr
+
 import climate_index_plotter as cip
+
+
+def _chunked_hourly(hours, cells):
+    time = pd.date_range("2000-01-01", periods=hours, freq="h")
+    values = np.zeros((hours, cells, cells), dtype="float32")
+    ds = xr.Dataset(
+        {"t2m": (("time", "lat", "lon"), values)},
+        coords={"time": time, "lat": np.arange(float(cells)), "lon": np.arange(float(cells))},
+    ).chunk({"time": hours, "lat": cells, "lon": cells})
+    ds["t2m"].encoding["preferred_chunks"] = {"time": hours, "lat": cells, "lon": cells}
+    return ds
+
+
+def test_check_stream_volume_sums_both_periods():
+    ds = _chunked_hourly(1000, 8)
+    gb = cip.check_stream_volume((ds, ds), ["t2m"])
+    assert gb == pytest.approx(2 * 1000 * 8 * 8 * 4 / 1e9)
+
+
+def test_check_stream_volume_refuses_an_impractical_run(monkeypatch):
+    monkeypatch.setattr(cip, "MAX_STREAM_GB", 0.0001)
+    ds = _chunked_hourly(1000, 8)
+    with pytest.raises(ValueError, match="above the .* GB limit"):
+        cip.check_stream_volume((ds, ds), ["t2m"])
+
+
+def test_main_passes_resolution_through_to_open_period(monkeypatch, tmp_path):
+    seen = []
+
+    def fake_open_period(model, experiment, bbox, year_range, variables, api_key=None, **kw):
+        seen.append(kw.get("resolution"))
+        raise RuntimeError("stop after the open call")
+
+    monkeypatch.setattr(cip.edh, "open_period", fake_open_period)
+    with pytest.raises(RuntimeError):
+        cip.main(index_spec="TXx", aoi_bbox="9,39,12,42", api_key="k",
+                 out_dir=str(tmp_path), resolution="high")
+    assert seen == ["high"]
+
+
+def test_main_rejects_an_unknown_resolution(tmp_path):
+    with pytest.raises(ValueError, match="Unknown resolution"):
+        cip.main(index_spec="TXx", aoi_bbox="9,39,12,42", api_key="k",
+                 out_dir=str(tmp_path), resolution="ultra")
 
 
 def test_output_filename_format():

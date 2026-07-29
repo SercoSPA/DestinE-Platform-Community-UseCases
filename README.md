@@ -31,9 +31,9 @@ At the moment, the repository includes four [Delta Twin service](https://deltatw
 
 ### Climate Index Plotter
 
-Illustrative two-panel layout (produced from synthetic input; real runs use Climate DT data):
+TXx (annual maximum of daily maximum temperature) over Italy, IFS-NEMO under SSP3-7.0:
 
-<img src="DeltaTwin/ClimateIndexPlotter/assets/example_illustrative.png" alt="Climate Index Plotter Example" width="80%" />
+<img src="DeltaTwin/ClimateIndexPlotter/assets/etccdi_TXx_1999-2014_2025-2049_IFS-NEMO_SSP3-7.0.png" alt="Climate Index Plotter Example" width="80%" />
 
 ## Usage
 

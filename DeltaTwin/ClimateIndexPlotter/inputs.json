@@ -18,5 +18,9 @@
   "aoi_shapefile": {
     "type": "string",
     "value": "none"
+  },
+  "resolution": {
+    "type": "string",
+    "value": "standard"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "climate-index-plotter",
-  "description": "Computes ETCCDI climate indices from the DestinE Climate DT (streamed from Earth Data Hub) and plots, per index, the projected change between a historical period (1999-2014) and a future projection period (2025-2049) as a two-panel absolute and percentage variation map.",
+  "description": "Computes ETCCDI climate indices from the DestinE Climate DT (streamed from Earth Data Hub) and plots, per index, the projected change between a historical period (1999-2014) and a future projection period (2025-2049) as a four-panel map: the two period climatologies plus the absolute and percentage variation.",
   "license": {
     "name": "LGPLv3",
     "url": "https://www.gnu.org/licenses/gpl-3.0.txt",
@@ -38,6 +38,11 @@
       "type": "string",
       "description": "Path or URL to a shapefile/GeoJSON polygon. Results are masked to it; derives the bbox if aoi_bbox is 'none'.",
       "value": "none"
+    },
+    "resolution": {
+      "type": "string",
+      "description": "Grid resolution: 'standard' (0.35 deg, ~29 km pixels) or 'high' (0.044 deg, ~4 km, Climate DT's native scale). 'high' streams roughly 65x more data, so keep the AOI small.",
+      "value": "standard"
     }
   },
 
@@ -75,7 +80,7 @@
           "cpu": "4000m",
           "ram": "16Gi"
         },
-        "command": "python climate_index_plotter.py $(inputs.edh_api_key) $(inputs.model) $(inputs.indices) $(inputs.aoi_bbox) $(inputs.aoi_shapefile)"
+        "command": "python climate_index_plotter.py $(inputs.edh_api_key) $(inputs.model) $(inputs.indices) $(inputs.aoi_bbox) $(inputs.aoi_shapefile) $(inputs.resolution)"
       },
       "inputs": {
         "edh_api_key": {
@@ -96,6 +101,10 @@
         "aoi_shapefile": {
           "type": "string",
           "value": "none"
+        },
+        "resolution": {
+          "type": "string",
+          "value": "standard"
         }
       },
       "outputs": {

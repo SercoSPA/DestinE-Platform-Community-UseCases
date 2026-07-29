@@ -11,6 +11,12 @@ log = logging.getLogger(__name__)
 _SECONDS_PER_DAY = 86400.0
 _PRECIP_RATE_VAR = "avg_tprate"
 
+# Resampling hourly -> daily leaves one Dask chunk per day, which makes the task graph huge
+# and breaks multi-day rolling windows (Rx5day needs a time chunk of at least 5). Regroup into
+# roughly one chunk per year: that matches the annual freq="YS" reduction the indices apply,
+# and leaves ample room for rolling windows and spell lengths.
+_DAILY_CHUNK_DAYS = 366
+
 
 def to_daily(ds: xr.Dataset) -> xr.Dataset:
     """Resample hourly ``t2m``/``avg_tprate`` to daily ETCCDI input variables.
@@ -46,5 +52,7 @@ def to_daily(ds: xr.Dataset) -> xr.Dataset:
         data["pr"] = pr
 
     out = xr.Dataset(data)
+    if any(v.chunks is not None for v in out.data_vars.values()):
+        out = out.chunk({"time": _DAILY_CHUNK_DAYS})
     log.info("Aggregated to daily: vars=%s, days=%s", list(out.data_vars), out.sizes.get("time"))
     return out
