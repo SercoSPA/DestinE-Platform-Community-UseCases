@@ -14,6 +14,9 @@ All notable changes to this repository are documented here. The format is based 
   `high` (0.044 deg, ~4 km, Climate DT's native scale).
 - ClimateIndexPlotter logs the volume it will stream before reading, and refuses runs above
   500 GB.
+- ClimateIndexPlotter `scripts/climate_dt_daily_t2m.py`: exports Climate DT daily-mean `t2m`
+  over a NUTS3 region as one GeoTIFF per model per day, reusing the component's EDH layer and
+  the LSTPlotter NUTS3 lookup. Has its own `requirements.txt`.
 
 ### Changed
 - ClimateIndexPlotter example asset is now a real Climate DT run (TXx over Italy) rather than a
