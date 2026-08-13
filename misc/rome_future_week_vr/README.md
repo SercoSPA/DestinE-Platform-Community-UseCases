@@ -10,6 +10,7 @@ Read that first if you are picking this up cold.
 ```
 flood/         hydrology projections from the DestinE data lake (HDA)
 urban_heat/    Climate DT daily temperature from Earth Data Hub (EDH)
+fire/          CMIP6 Fire Weather Index feasibility test (reference only, not usable)
 docs/          feasibility assessment
 ```
 
@@ -103,3 +104,40 @@ cd urban_heat && pytest test_climate_dt_daily_t2m.py
 
 17 offline tests covering month parsing, the cell-centre-to-corner geotransform, north-up row
 order, and a GeoTIFF round trip. Streaming and the NUTS3 download are not exercised.
+
+## fire/
+
+**Reference only. Not usable for the simulations.** A one-off feasibility test asking whether
+CMIP6 on Earth Data Hub can separate SSP scenarios by Fire Weather Index over the Mediterranean
+at mid-century. Kept for the record; it is not a pipeline and has no CLI.
+
+```shell
+cd fire && python fwi_cmip6_test.py     # needs EDH_API_KEY, runs in about 15 s
+```
+
+Store `cmip6/CMCC-CM2-SR5-ScenarioMIP-r1i1p1f1-day-gn-v0.zarr` on `data.earthdatahub.destine.eu`
+(note: a different host from Climate DT, and it needs `zarr_format=3`). Computes FWI with
+`xclim.indices.fire.cffwis_indices` from daily `tas`, `hurs`, `pr`, `sfcWind` and maps days per
+Apr-Sep season above FWI 30, averaged over 2045-2054, for SSP1-2.6 / SSP3-7.0 / SSP5-8.5.
+Outputs `fwi_days_by_ssp.png` and `fwi_days_diff.png`.
+
+Why it is not good enough:
+
+- **Resolution is ~1 degree, not the 0.044 deg the catalogue page claims.** Native grid is
+  0.9424 deg lat x 1.25 deg lon, about 105 x 103 km at 42N. An Italy bounding box gets 99 cells
+  of which only **42 carry land data**. Basin-scale at best, useless at city scale.
+- **Scenario separation is weak below SSP5-8.5.** Land mean days above FWI 30 north of 36N:
+  36.4 (SSP1-2.6), 40.8 (SSP3-7.0), 51.2 (SSP5-8.5). Correctly ordered, and SSP5-8.5 is
+  +41%, but SSP3-7.0 versus SSP1-2.6 is only +3 days basin-wide and is not distinguishable by
+  eye without the difference plot.
+- **The drought codes run away.** With no fire-season reset over a continuous 10-year run, and a
+  box reaching to 30N, hyper-arid Saharan cells accumulate DC without bound: median 542 but max
+  11,178 against a normal ceiling near 1,000. This inflates the full-box mean from 36 to 67 days
+  and dominates the colour scale. Any real use needs a season reset, `overwintering=True`, or a
+  domain cut at ~35N.
+
+Useful things it did establish: the four SSPs are a single `experiment_id` dimension in one store
+(`ssp126`, `ssp245`, `ssp370`, `ssp585`), longitude is 0-360 so a Mediterranean box wraps, the
+calendar is `DatetimeNoLeap`, and FWI is computable from CMIP6 daily fields at all. FWI over
+Climate DT at 4 km, which is what an exhibit would actually need, is discussed in the
+[feasibility doc](docs/rome-future-week-scenario-feasibility.md).

@@ -1,4 +1,4 @@
-# Covers every script under rome_future_week_vr (both flood/ and urban_heat/).
+# Covers every script under rome_future_week_vr (flood/, urban_heat/, fire/).
 # Install with: pip install -r requirements.txt
 
 # core data handling
@@ -6,6 +6,9 @@ xarray
 numpy
 pandas
 scipy
+
+# climate indices: Fire Weather Index (fire/)
+xclim
 
 # Zarr streaming from Earth Data Hub (urban_heat)
 zarr>=3
