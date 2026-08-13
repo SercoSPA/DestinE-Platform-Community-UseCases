@@ -1,0 +1,11 @@
+xarray
+zarr>=3
+dask
+fsspec
+aiohttp
+numpy
+pandas
+rasterio
+geopandas
+shapely
+regionmask
