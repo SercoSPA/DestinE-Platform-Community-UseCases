@@ -389,11 +389,12 @@ def plot_one(variable, scenario, lons, lats, vals, vlim, bbox, out_path, period)
 
 
 def main(argv=None) -> int:
-    repo = Path(__file__).resolve().parents[3]
+    # relative to this file, so the default survives the directory being moved
+    default_out = Path(__file__).resolve().parent / "assets" / "rome-hydrology"
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--out-dir", default=str(repo / "docs" / "assets" / "rome-hydrology"),
-                   help="where the PNGs go")
+    p.add_argument("--out-dir", default=str(default_out),
+                   help="where the PNGs and GeoTIFFs go")
     p.add_argument("--cache-dir",
                    default=str(Path(tempfile.gettempdir()) / "sis_hydrology_cache"),
                    help="download cache, kept outside the repo (products are ~11 MB each)")

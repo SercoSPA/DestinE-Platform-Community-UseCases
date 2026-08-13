@@ -1,0 +1,36 @@
+# Covers every script under rome_future_week_vr (both flood/ and urban_heat/).
+# Install with: pip install -r requirements.txt
+
+# core data handling
+xarray
+numpy
+pandas
+scipy
+
+# Zarr streaming from Earth Data Hub (urban_heat)
+zarr>=3
+dask
+fsspec
+aiohttp
+
+# reading the NetCDF products ordered from HDA (flood)
+netcdf4
+
+# raster output
+rasterio
+
+# geometry, NUTS3 lookup and polygon masking
+geopandas
+shapely
+regionmask
+
+# plotting
+matplotlib
+cartopy
+
+# DESP / HDA access (flood)
+requests
+destinepyauth>=1.3.0
+
+# tests only: pytest urban_heat/test_climate_dt_daily_t2m.py
+pytest

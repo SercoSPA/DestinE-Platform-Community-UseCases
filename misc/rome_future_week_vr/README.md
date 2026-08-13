@@ -1,99 +1,105 @@
-# Scripts
+# Rome Future Week: scenario data
 
-Standalone utilities built on the ClimateIndexPlotter model code, run directly rather than as
-DeltaTwin components.
+Scripts and outputs from assessing whether DestinE data can support the Serco Rome Future Week
+control-room exhibit scenarios. Standalone utilities, not DeltaTwin components.
 
-## climate_dt_daily_t2m.py
+Feasibility findings, verified dataset details and open questions are in
+[docs/rome-future-week-scenario-feasibility.md](docs/rome-future-week-scenario-feasibility.md).
+Read that first if you are picking this up cold.
 
-Exports Climate DT daily-mean 2 m temperature (`t2m`) over a NUTS3 region as one GeoTIFF per
-model per day.
-
-Hourly `t2m` is streamed from Earth Data Hub, averaged over each UTC day, and written as
-single-band float32 GeoTIFFs in EPSG:4326. The script reuses the Earth Data Hub access layer
-from [this component](../models/climate_index_plotter/edh.py) and the NUTS3 lookup from
-[LSTPlotter](../../LSTPlotter/models/lst_plotter/nuts_helper.py), so it needs both components
-present in the checkout.
-
-### Install
-
-```shell
-pip install -r requirements.txt
+```
+flood/         hydrology projections from the DestinE data lake (HDA)
+urban_heat/    Climate DT daily temperature from Earth Data Hub (EDH)
+docs/          feasibility assessment
 ```
 
-These are a subset of the ClimateIndexPlotter model requirements plus `rasterio` for GeoTIFF
-output; `xclim`, `matplotlib` and `cartopy` are not needed. If you already have a working
-ClimateIndexPlotter environment, adding `rasterio` to it is enough.
-
-### Usage
+## Setup
 
 ```shell
-export EDH_API_KEY="<your Earth Data Hub API key>"
-
-python climate_dt_daily_t2m.py \
-    --region Roma \
-    --start 2049-01 --end 2049-12 \
-    --models IFS-NEMO,IFS-FESOM \
-    --out-dir ./rome_t2m_2049
+pip install -r requirements.txt      # covers both flood/ and urban_heat/
+cp .env.example .env                 # then fill in your credentials
+. ./.env                             # values are export-prefixed, so this is enough
 ```
 
-That produces `rome_t2m_2049/<MODEL>/t2m_daily_mean_<MODEL>_<YYYYMMDD>.tif`, 365 files per
-model. Over Rome it streams about 0.32 GB per model and takes well under a minute.
+One dependency list covers everything here. `.env` is gitignored; `.env.example` is not.
 
-Add `--dry-run` to validate the request and report volumes without writing anything.
+### Credentials
 
-### Options
+Two DestinE services, two mechanisms:
 
-| Option | Description |
-| ------ | ----------- |
-| `--region` | Region or city name, looked up against the Eurostat NUTS3 classification (e.g. `Roma` resolves to `ITI43`). Mutually exclusive with `--nuts3`. |
-| `--nuts3` | NUTS3 code directly, e.g. `ITI43`. |
-| `--start`, `--end` | First and last month as `YYYY-MM`, both inclusive. |
-| `--models` | Comma-separated subset of `IFS-NEMO`, `IFS-FESOM`, `ICON`. Defaults to all three. |
-| `--resolution` | `high` (0.044 deg, ~4 km, default) or `standard` (0.35 deg, ~29 km). |
-| `--out-dir` | Output directory. One subdirectory per model is created. |
-| `--clip-to-region` | Mask cells outside the NUTS3 polygon to nodata. Without it, the full bounding box is written. |
-| `--api-key` | Earth Data Hub API key. Defaults to `EDH_API_KEY`. |
-| `--dry-run` | Validate and report, write nothing. |
+| Variable | Used by | What it is |
+| -------- | ------- | ---------- |
+| `EDH_API_KEY` | `urban_heat/` | Earth Data Hub API key from your DESP account settings. Climate DT is restricted and needs upgraded DESP access. Can also be passed as `--api-key`. |
+| `DESPAUTH_USER`, `DESPAUTH_PASSWORD` | `flood/` | Your destine.eu login. The flood scripts exchange these for an HDA token via `destinepyauth`, so no separate key is needed. |
 
-### Model coverage
+Scripts fail immediately with a clear message if credentials are missing.
 
-The three Climate DT models do not all reach the same end year under SSP3-7.0. Verified against
-the live Earth Data Hub store:
+`urban_heat/climate_dt_daily_t2m.py` also reuses the Earth Data Hub access layer from
+[ClimateIndexPlotter](../../DeltaTwin/ClimateIndexPlotter/models/climate_index_plotter/edh.py)
+and the NUTS3 lookup from
+[LSTPlotter](../../DeltaTwin/LSTPlotter/models/lst_plotter/nuts_helper.py), located by walking up
+to the repository root. It therefore needs both components in the checkout and is not portable as
+a single file. The `flood/` scripts are self-contained.
 
-| Model | SSP3-7.0 coverage |
-| ----- | ----------------- |
-| IFS-NEMO | 2015-01-01 to 2049-12-31 |
-| IFS-FESOM | 2015-01-01 to 2049-12-31 |
-| ICON | 2015-01-01 to **2040-12-31** |
+## flood/
 
-ICON therefore cannot serve any month in 2049. The script checks every requested model's real
-time axis before streaming and fails with the model's actual coverage rather than writing
-partial output, so drop `ICON` from `--models` for a 2049 request.
+Orders C3S/SMHI hydrology impact indicators from HDA
+(`EO.ECMWF.DAT.SIS_HYDROLOGY_VARIABLES_DERIVED_PROJECTIONS`, E-HYPE on EURO-CORDEX, 5 km) and
+plots them over Rome, one PNG plus a matching EPSG:4326 GeoTIFF per variable per RCP scenario.
 
-### Output conventions
+```shell
+cd flood
+python sis_hydrology_rome.py                                          # default variable set, 2041-2070
+python sis_hydrology_rome.py --variables minimum_river_discharge --period 2071_2100
+python sis_flood_metric_scan.py                                       # which metric/period separates the pathways
+```
 
-- CRS EPSG:4326, north-up (first raster row is the northernmost latitude).
-- Cell-centred coordinates: the raster origin sits half a pixel outside the first centre.
-- `float32`, nodata `NaN`, DEFLATE compressed, band described as `t2m`.
-- Values are kelvin, as published; no unit conversion is applied.
-- Days are UTC days, matching the Climate DT time axis. Rome is UTC+1/+2, so a local-midnight
-  daily mean would differ slightly.
-- Each file carries `date`, `model`, `experiment`, `units`, `resolution`, `region`,
-  `time_convention` and `source` GeoTIFF tags.
+Outputs land in `flood/assets/rome-hydrology/`. Products are ordered on demand from the
+Copernicus CDS, so a first run waits 30 to 60 seconds per scenario; downloads cache to
+`$TMPDIR/sis_hydrology_cache` (~11 MB each), outside the repo.
 
-### Choosing a resolution
+`sis_flood_metric_scan.py` is a decision tool, not a plotter: it tabulates whether a given metric
+and period actually distinguishes the RCP pathways. `flood_recurrence_rome.py` is an earlier
+single-variable version, superseded and kept for reference only.
 
-At `standard` resolution the Rome NUTS3 bounding box is only about 3 x 5 cells, which is too
-coarse to be useful for a city. `high` gives about 20 x 35 cells and is the default for that
-reason. See the ClimateIndexPlotter README for the full resolution and data-volume discussion.
+### Three traps in the flood output
+
+- **`flood_recurrence_*` are return levels, not frequencies.** +30% means the 1-in-50-year peak
+  discharge is 30% larger, not that it happens 30% more often.
+- **Every run is one ensemble member** of 4 RCMs x 10 hydrological models. Do not quote a
+  single-cell value.
+- **The flood metrics do not order with the forcing** in any metric or period tested, whereas
+  `minimum_river_discharge` does (-15.3 / -18.9 / -55.1 % for RCP2.6 / 4.5 / 8.5 at 2071-2100).
+  For Rome the robust signal is drought, not flooding. See §8 of the feasibility doc.
+
+## urban_heat/
+
+Exports Climate DT daily-mean 2 m temperature over a NUTS3 region as one GeoTIFF per model per
+day, in EPSG:4326, kelvin, on UTC days.
+
+```shell
+cd urban_heat
+python climate_dt_daily_t2m.py --region Roma --start 2049-01 --end 2049-12 \
+    --models IFS-NEMO,IFS-FESOM --out-dir ./rome_t2m_2049
+```
+
+Produces `<out-dir>/<MODEL>/t2m_daily_mean_<MODEL>_<YYYYMMDD>.tif`. Over Rome that is 365 files
+per model, about 0.32 GB streamed per model, well under a minute. `--dry-run` validates and
+reports volumes without writing. `--clip-to-region` masks outside the NUTS3 polygon instead of
+keeping the full bounding box.
+
+Defaults to `--resolution high` (0.044 deg, ~4 km) because at `standard` (0.35 deg) the Rome
+bounding box is only about 3 x 5 cells. High resolution gives about 20 x 35.
+
+**Model coverage under SSP3-7.0**, verified against the live store: IFS-NEMO and IFS-FESOM reach
+2049-12-31, but **ICON stops at 2040-12-31**. The script validates every requested model's real
+time axis before streaming and fails with its actual coverage, so drop `ICON` for a 2049 request.
 
 ### Tests
 
 ```shell
-pip install -r requirements.txt pytest
-pytest test_climate_dt_daily_t2m.py
+cd urban_heat && pytest test_climate_dt_daily_t2m.py
 ```
 
-The tests are offline: they cover month parsing, the cell-centre-to-corner geotransform, the
-north-up row order, and a real GeoTIFF round trip. Streaming and the NUTS3 download are not
-exercised.
+17 offline tests covering month parsing, the cell-centre-to-corner geotransform, north-up row
+order, and a GeoTIFF round trip. Streaming and the NUTS3 download are not exercised.
