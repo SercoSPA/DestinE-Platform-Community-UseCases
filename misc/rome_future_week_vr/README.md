@@ -71,7 +71,8 @@ single-variable version, superseded and kept for reference only.
   single-cell value.
 - **The flood metrics do not order with the forcing** in any metric or period tested, whereas
   `minimum_river_discharge` does (-15.3 / -18.9 / -55.1 % for RCP2.6 / 4.5 / 8.5 at 2071-2100).
-  For Rome the robust signal is drought, not flooding. See §8 of the feasibility doc.
+  For Rome the robust signal is drought, not flooding. Use the **2071-2100** window: at 2041-2070
+  the scenarios are indistinguishable. See the feasibility doc for the full reasoning.
 
 ## urban_heat/
 
